@@ -55,7 +55,7 @@ export default {
       if (!isAdminRecovery && isDatacenterIP(ip)) {
         ctx.waitUntil(logRequest(env, { type: "blocked_datacenter_ip", ip, path }));
         if (sessionId) {
-          ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.datacenter_ip]));
+          ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [{ delta: SCORE_DELTAS.datacenter_ip, reason: "datacenter_ip" }]));
         }
         return jsonResponse({ error: "forbidden", reason: "datacenter_ip" }, 403);
       }
@@ -69,7 +69,7 @@ export default {
         if (rateResult.blocked) {
           ctx.waitUntil(logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path }));
           if (sessionId) {
-            ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.rate_limit_violation]));
+            ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [{ delta: SCORE_DELTAS.rate_limit_violation, reason: "rate_limit" }]));
           }
           return jsonResponse({ error: "rate_limited", retry_after_ms: rateResult.retryAfterMs }, 429);
         }

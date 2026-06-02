@@ -238,6 +238,7 @@ export async function handleGetSession(request, env) {
     anomalyScore: session.anomalyScore,
     banned: session.banned,
     createdAt: session.createdAt,
+    anomalyLog: session.anomalyLog || [],
   });
 }
 

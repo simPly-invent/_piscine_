@@ -60,7 +60,7 @@ export async function validateSessionBinding(env, sessionId, ip, userAgent) {
   return { valid: true, anomalyDelta, reasons, session };
 }
 
-export async function updateAnomalyScore(env, config, sessionId, delta) {
+export async function updateAnomalyScore(env, config, sessionId, delta, reasons = []) {
   const session = await env.KV.get(`sess:${sessionId}`, "json");
   if (!session) return null;
 
@@ -68,7 +68,14 @@ export async function updateAnomalyScore(env, config, sessionId, delta) {
   const threshold = config.anomaly_ban_threshold ?? 70;
   const banned = newScore >= threshold;
 
-  const updated = { ...session, anomalyScore: newScore, banned };
+  // Keep a breakdown of what added to the score so the player can see exactly
+  // which security layer flagged them (shown on the scoreboard).
+  const anomalyLog = session.anomalyLog || [];
+  if (delta > 0) {
+    anomalyLog.push({ ts: Date.now(), delta, reasons: reasons.length ? reasons : ["unknown"] });
+  }
+
+  const updated = { ...session, anomalyScore: newScore, banned, anomalyLog: anomalyLog.slice(-20) };
   await env.KV.put(`sess:${sessionId}`, JSON.stringify(updated), {
     expirationTtl: config.session_ttl_seconds,
   });

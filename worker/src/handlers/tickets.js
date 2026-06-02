@@ -93,14 +93,17 @@ export async function handleCheckoutInit(request, env, config) {
   }
 
   const deltas = [];
-  if (binding.anomalyDelta > 0) deltas.push(binding.anomalyDelta);
+  if (binding.anomalyDelta > 0)
+    deltas.push({ delta: binding.anomalyDelta, reason: `session_binding (${binding.reasons.join(",")})` });
 
   const fpResult = await checkFingerprint(env, config, sessionId, canvasFingerprint, request);
-  if (fpResult.score > 0) deltas.push(fpResult.score);
+  if (fpResult.score > 0)
+    deltas.push({ delta: fpResult.score, reason: `fingerprint (${fpResult.reasons.join(",")})` });
 
   await recordAction(env, sessionId, "checkout_init", Date.now());
   const behResult = await analyzeSession(env, sessionId, config);
-  if (behResult.suspicious) deltas.push(SCORE_DELTAS.behavioral_flag);
+  if (behResult.suspicious)
+    deltas.push({ delta: SCORE_DELTAS.behavioral_flag, reason: `behavioral (${behResult.reasons.join(",")})` });
 
   if (deltas.length > 0) {
     const scoreResult = await applyScoreDeltas(env, config, sessionId, deltas);
@@ -133,12 +136,13 @@ export async function handleCheckoutComplete(request, env, config) {
   }
 
   const deltas = [];
-  if (binding.anomalyDelta > 0) deltas.push(binding.anomalyDelta);
+  if (binding.anomalyDelta > 0)
+    deltas.push({ delta: binding.anomalyDelta, reason: `session_binding (${binding.reasons.join(",")})` });
 
   // Honeypot check
   const honeypotTriggered = await checkHoneypot(env, sessionId, body);
   if (honeypotTriggered) {
-    deltas.push(SCORE_DELTAS.honeypot_triggered);
+    deltas.push({ delta: SCORE_DELTAS.honeypot_triggered, reason: "honeypot_filled" });
     await applyScoreDeltas(env, config, sessionId, deltas);
     await logRequest(env, { type: "honeypot_triggered", sessionId, ip });
     return jsonResponse({ error: "checkout_failed", reason: "validation_error" }, 400);
@@ -154,7 +158,8 @@ export async function handleCheckoutComplete(request, env, config) {
   // Token
   const tokenResult = await consumeCheckoutToken(env, checkoutToken, sessionId);
   if (!tokenResult.valid) {
-    if (tokenResult.anomalyScore) deltas.push(tokenResult.anomalyScore);
+    if (tokenResult.anomalyScore)
+      deltas.push({ delta: tokenResult.anomalyScore, reason: `token_${tokenResult.reason}` });
     await applyScoreDeltas(env, config, sessionId, deltas);
     return jsonResponse({ error: tokenResult.reason }, 400);
   }
@@ -163,7 +168,7 @@ export async function handleCheckoutComplete(request, env, config) {
   await recordAction(env, sessionId, "checkout_complete", Date.now());
   const behResult = await analyzeSession(env, sessionId, config);
   if (behResult.suspicious) {
-    deltas.push(SCORE_DELTAS.behavioral_flag);
+    deltas.push({ delta: SCORE_DELTAS.behavioral_flag, reason: `behavioral (${behResult.reasons.join(",")})` });
     await logRequest(env, { type: "behavioral_flag", reasons: behResult.reasons, sessionId, ip });
   }
 

@@ -77,6 +77,27 @@ function update(data) {
       bannedEl.textContent = data.your_banned ? "⛔ BANNED" : "✓ Active";
       bannedEl.style.color = data.your_banned ? "#e74c3c" : "#2ecc71";
     }
+
+    // Score breakdown — which layer added what
+    const bd = document.getElementById("score-breakdown");
+    if (bd) {
+      const log = data.your_anomaly_log || [];
+      if (log.length === 0) {
+        bd.innerHTML = score === 0
+          ? '<span style="color:#2ecc71">✓ Clean — no flags triggered</span>'
+          : "";
+      } else {
+        bd.innerHTML =
+          '<div style="color:#888;margin-bottom:.3rem">Score breakdown:</div>' +
+          log.slice().reverse().map(e => {
+            const reasons = (e.reasons || []).join(", ");
+            return `<div style="display:flex;justify-content:space-between;padding:.15rem 0">
+              <span style="color:#f9a8a8">${reasons}</span>
+              <span style="color:#e74c3c;font-weight:bold">+${e.delta}</span>
+            </div>`;
+          }).join("");
+      }
+    }
   }
 
   // Bot feed
@@ -132,6 +153,7 @@ if (typeof EventSource === "undefined") {
         ban_threshold:      d1.config?.anomaly_ban_threshold,
         your_anomaly_score: d2.anomalyScore ?? null,
         your_banned:        d2.banned ?? null,
+        your_anomaly_log:   d2.anomalyLog ?? [],
         bot_feed:           d1.bot_activity,
       });
     } catch (_) {}

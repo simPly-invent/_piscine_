@@ -50,6 +50,7 @@ export async function handleScoreboard(request, env) {
           ban_threshold:      config.anomaly_ban_threshold,
           your_anomaly_score: session?.anomalyScore ?? null,
           your_banned:        session?.banned       ?? null,
+          your_anomaly_log:   session?.anomalyLog   ?? [],
           bot_feed: Object.entries(botState.botAccounts)
             .filter(([, v]) => v.bought > 0)
             .slice(0, 10)

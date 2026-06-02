@@ -46,8 +46,17 @@ import { updateAnomalyScore } from "./session-binding.js";
  * Apply multiple score deltas at once and return the new score.
  * Returns null if the session doesn't exist.
  */
+/**
+ * Apply score deltas. Each entry can be a plain number, or a labelled
+ * { delta, reason } object so the scoreboard can show what flagged the player.
+ */
 export async function applyScoreDeltas(env, config, sessionId, deltas) {
   if (!deltas || deltas.length === 0) return null;
-  const total = deltas.reduce((s, d) => s + d, 0);
-  return updateAnomalyScore(env, config, sessionId, total);
+  let total = 0;
+  const reasons = [];
+  for (const d of deltas) {
+    if (typeof d === "number") { total += d; reasons.push(`+${d}`); }
+    else { total += d.delta; reasons.push(`${d.reason} (+${d.delta})`); }
+  }
+  return updateAnomalyScore(env, config, sessionId, total, reasons);
 }
