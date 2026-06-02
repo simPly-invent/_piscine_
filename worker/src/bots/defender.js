@@ -56,37 +56,60 @@ function fakeEmail(name) {
   return `${slug}@${DOMAINS[Math.floor(Math.random() * DOMAINS.length)]}`;
 }
 
-/** Generate the complete timeline for all bots and store in KV. */
+/**
+ * Generate the complete timeline for all bots and store in KV.
+ *
+ * Each bot's purchase attempts are spread across a "drain window"
+ * (config.bot_drain_seconds). The swarm is sized so that, collectively, it can
+ * consume the ENTIRE pool by the end of that window — so if the human does
+ * nothing, the bots take everything. The drain window scales with difficulty:
+ * easy gives the player ~10 min, nightmare ~12 s.
+ *
+ * Bots start at staggered times within the window (not all at once) so the
+ * pool drains progressively rather than instantly — this is the gap a fast,
+ * well-timed human bot must exploit to grab tickets before they run out.
+ */
 export async function initBotSchedule(env, config, simStartMs) {
-  const count   = config.defender_bots_count;
-  const profiles = DIFFICULTY_PROFILES[config.difficulty] || DIFFICULTY_PROFILES.medium;
-  const maxTickets = config.max_tickets_per_account;
-  const simDuration = config.session_ttl_seconds * 1000;
+  const count       = config.defender_bots_count;
+  const profiles    = DIFFICULTY_PROFILES[config.difficulty] || DIFFICULTY_PROFILES.medium;
+  const maxTickets  = config.max_tickets_per_account;
+  const drainMs     = (config.bot_drain_seconds ?? 180) * 1000;
+  const failRate    = config.clumsy_fail_rate ?? 0.25;
 
   const bots = [];
 
   for (let i = 0; i < count; i++) {
     const roll = Math.random();
     let type;
-    if (roll < profiles.fast)                   type = "fast";
-    else if (roll < profiles.fast + profiles.slow) type = "slow";
-    else                                          type = "clumsy";
+    if (roll < profiles.fast)                       type = "fast";
+    else if (roll < profiles.fast + profiles.slow)  type = "slow";
+    else                                            type = "clumsy";
 
-    const name  = fakeName();
-    const email = fakeEmail(name);
-    const ua    = randomUserAgent();
+    const name      = fakeName();
+    const email     = fakeEmail(name);
+    const ua        = randomUserAgent();
     const accountId = `bot_${randomToken(8)}`;
 
-    // Build a list of purchase-attempt timestamps using Poisson-like intervals
-    const delays  = PROFILE_DELAYS[type];
+    // Each bot enters at a random point within the drain window. Faster bots
+    // tend to arrive earlier; slow bots later. This staggering is what creates
+    // the progressive drain (and the window the human can race into).
+    const arrivalBias = type === "fast" ? 0.5 : type === "slow" ? 1.0 : 0.75;
+    const firstAttempt = simStartMs + Math.random() * drainMs * arrivalBias;
+
+    // Per-bot attempt spacing: scaled so the swarm empties the pool by drainMs.
+    const baseDelays = PROFILE_DELAYS[type];
+    const speedScale = drainMs / 180000; // normalise against the 3-min baseline
+    const minGap = Math.max(50, baseDelays.min * speedScale);
+    const maxGap = Math.max(120, baseDelays.max * speedScale);
+
     const actions = [];
-    let t = simStartMs + randInt(delays.min, delays.max); // first attempt delay
+    let t = firstAttempt;
     let purchased = 0;
 
-    while (t < simStartMs + simDuration && purchased < maxTickets) {
-      const failCaptcha = type === "clumsy" && Math.random() < 0.3;
-      actions.push({ t, failCaptcha });
-      t += randInt(delays.min, delays.max);
+    while (t < simStartMs + drainMs * 1.2 && purchased < maxTickets) {
+      const failCaptcha = type === "clumsy" && Math.random() < failRate;
+      actions.push({ t: Math.round(t), failCaptcha });
+      t += randInt(minGap, maxGap);
       if (!failCaptcha) purchased++;
     }
 
@@ -111,20 +134,32 @@ export async function getBotState(env, ticketsAvailableAtStart, config, nowMs) {
   const data = await env.KV.get("bot_schedule", "json");
   if (!data) return { totalBotTickets: 0, botAccounts: {} };
 
+  const maxPerAccount = config.max_tickets_per_account;
+
+  // Flatten all successful attempts up to nowMs into a single timeline, then
+  // replay in chronological order so the drain is time-accurate (a bot that
+  // attempts at t=5s gets a ticket before one attempting at t=8s, regardless
+  // of array position).
+  const events = [];
+  for (const bot of data.bots) {
+    for (const action of bot.actions) {
+      if (action.t > nowMs) break;       // actions are time-ordered per bot
+      if (action.failCaptcha) continue;  // deliberate miss — no purchase
+      events.push({ t: action.t, accountId: bot.accountId, type: bot.type });
+    }
+  }
+  events.sort((a, b) => a.t - b.t);
+
   let ticketsLeft = ticketsAvailableAtStart;
   const botAccounts = {};
 
-  for (const bot of data.bots) {
-    let bought = 0;
-    for (const action of bot.actions) {
-      if (action.t > nowMs) break;
-      if (action.failCaptcha) continue;
-      if (ticketsLeft <= 0) break;
-      if (bought >= config.max_tickets_per_account) break;
-      bought++;
-      ticketsLeft--;
-    }
-    if (bought > 0) botAccounts[bot.accountId] = { bought, type: bot.type };
+  for (const ev of events) {
+    if (ticketsLeft <= 0) break;
+    const acc = botAccounts[ev.accountId] || { bought: 0, type: ev.type };
+    if (acc.bought >= maxPerAccount) continue;
+    acc.bought++;
+    ticketsLeft--;
+    botAccounts[ev.accountId] = acc;
   }
 
   const totalBotTickets = Object.values(botAccounts).reduce((s, v) => s + v.bought, 0);

@@ -172,8 +172,28 @@ export async function handleCheckoutComplete(request, env, config) {
     return jsonResponse({ error: "payment_invalid" }, 400);
   }
 
-  // Atomic ticket decrement
+  // Race against the defender bots. The bots are simulated (they don't touch
+  // the Durable Object), so before granting a human purchase we check the
+  // EFFECTIVE pool = DO count − tickets the bot swarm has consumed by now.
+  // If the bots have already drained it, the human is too late → sold out.
   const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
+  const statusRes = await counterStub.fetch("http://do/counter", {
+    method: "POST", body: JSON.stringify({ action: "status" }),
+  });
+  const { count: doCount, total } = await statusRes.json();
+  const { totalBotTickets } = await getBotState(env, total, config, Date.now());
+  const effectiveRemaining = doCount - totalBotTickets;
+
+  if (effectiveRemaining < tokenResult.seats.length) {
+    await logRequest(env, { type: "purchase_too_late", sessionId, ip, reason: "bots_drained_pool" });
+    return jsonResponse({
+      error: "sold_out",
+      reason: "the defender bots grabbed the remaining tickets first",
+      remaining: Math.max(0, effectiveRemaining),
+    }, 409);
+  }
+
+  // Atomic ticket decrement
   const res = await counterStub.fetch("http://do/counter", {
     method: "POST",
     body: JSON.stringify({
