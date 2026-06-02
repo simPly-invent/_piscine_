@@ -18,7 +18,7 @@ new_classes = ["TicketCounter"]
 # Create with: wrangler kv:namespace create TICKETSTORM_KV
 [[kv_namespaces]]
 binding = "KV"
-id = "YOUR_KV_NAMESPACE_ID"
+id = "3a35e54a9bab4a7d9aa6f50447ea3355"
 
 [vars]
 ENVIRONMENT = "production"
