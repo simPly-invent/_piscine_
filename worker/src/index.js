@@ -88,8 +88,7 @@ export default {
     }
 
     // ── ROUTING ──────────────────────────────────────────────────────────────
-    {
-      if (path === "/api/auth/register" && request.method === "POST")
+    if (path === "/api/auth/register" && request.method === "POST")
         return handleRegister(request, env, config);
 
       if (path === "/api/auth/login" && request.method === "POST")
@@ -129,7 +128,6 @@ export default {
         return handleScoreboard(request, env);
 
       return jsonResponse({ error: "not_found" }, 404);
-    }
 
     } catch (err) {
       console.error(err);
