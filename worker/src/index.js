@@ -47,7 +47,6 @@ export default {
       });
     }
 
-    // Wrap everything so CORS headers are always present even on crashes
     try {
 
     const config = await getConfig(env);
@@ -89,7 +88,7 @@ export default {
     }
 
     // ── ROUTING ──────────────────────────────────────────────────────────────
-    try {
+    {
       if (path === "/api/auth/register" && request.method === "POST")
         return handleRegister(request, env, config);
 
@@ -130,6 +129,7 @@ export default {
         return handleScoreboard(request, env);
 
       return jsonResponse({ error: "not_found" }, 404);
+    }
 
     } catch (err) {
       console.error(err);
