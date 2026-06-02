@@ -10,16 +10,16 @@ const LOG_KEY = "request_logs";
 const MAX_ENTRIES = 500;
 
 export async function logRequest(env, entry) {
-  // Fire-and-forget — don't block the response on logging
-  const logs = (await env.KV.get(LOG_KEY, "json")) || [];
-  logs.push({
-    ts: Date.now(),
-    ...entry,
-  });
-  // Trim to ring buffer size
-  const trimmed = logs.slice(-MAX_ENTRIES);
-  // expirationTtl keeps KV tidy if the simulation is never reset
-  await env.KV.put(LOG_KEY, JSON.stringify(trimmed), { expirationTtl: 86400 });
+  // Logging must NEVER break the request it's logging. Swallow all errors
+  // (e.g. KV write quota exceeded on free tier) so the response still succeeds.
+  try {
+    const logs = (await env.KV.get(LOG_KEY, "json")) || [];
+    logs.push({ ts: Date.now(), ...entry });
+    const trimmed = logs.slice(-MAX_ENTRIES);
+    await env.KV.put(LOG_KEY, JSON.stringify(trimmed), { expirationTtl: 86400 });
+  } catch (err) {
+    console.error("logRequest failed (non-fatal):", err.message);
+  }
 }
 
 export async function getLogs(env) {

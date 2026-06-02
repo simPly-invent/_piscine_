@@ -37,9 +37,11 @@ export async function handleRegister(request, env, config) {
     return jsonResponse({ error: "too_many_accounts_from_ip" }, 429);
   }
 
-  // Unique email check
-  const emailKey = `email:${email.toLowerCase()}`;
-  if (await env.KV.get(emailKey)) {
+  // Account is keyed directly by email (one fewer KV write than a separate
+  // email→id index). accountId stays as the salt + per-account purchase key.
+  const emailLower = email.toLowerCase();
+  const accKey = `acc:${emailLower}`;
+  if (await env.KV.get(accKey)) {
     return jsonResponse({ error: "email_already_registered" }, 409);
   }
 
@@ -47,11 +49,10 @@ export async function handleRegister(request, env, config) {
   const passwordHash = await sha256hex(password + accountId); // salt with accountId
 
   await env.KV.put(
-    `acc:${accountId}`,
-    JSON.stringify({ accountId, username, email: email.toLowerCase(), passwordHash, createdAt: Date.now() }),
+    accKey,
+    JSON.stringify({ accountId, username, email: emailLower, passwordHash, createdAt: Date.now() }),
     { expirationTtl: config.session_ttl_seconds * 2 }
   );
-  await env.KV.put(emailKey, accountId, { expirationTtl: config.session_ttl_seconds * 2 });
   ipAccounts.push(accountId);
   await env.KV.put(ipAccountsKey, JSON.stringify(ipAccounts), { expirationTtl: config.session_ttl_seconds });
 
@@ -71,20 +72,17 @@ export async function handleLogin(request, env, config) {
 
   if (!email || !password) return jsonResponse({ error: "missing_fields" }, 400);
 
-  const accountId = await env.KV.get(`email:${email.toLowerCase()}`);
-  if (!accountId) return jsonResponse({ error: "invalid_credentials" }, 401);
-
-  const account = await env.KV.get(`acc:${accountId}`, "json");
+  const account = await env.KV.get(`acc:${email.toLowerCase()}`, "json");
   if (!account) return jsonResponse({ error: "invalid_credentials" }, 401);
 
-  const expectedHash = await sha256hex(password + accountId);
+  const expectedHash = await sha256hex(password + account.accountId);
   if (account.passwordHash !== expectedHash) {
     return jsonResponse({ error: "invalid_credentials" }, 401);
   }
 
   const sessionId = randomToken(32);
-  await createSession(env, config, sessionId, ip, ua, accountId);
+  await createSession(env, config, sessionId, ip, ua, account.accountId);
 
-  await logRequest(env, { type: "login", accountId, ip });
-  return jsonResponse({ ok: true, accountId, sessionId });
+  await logRequest(env, { type: "login", accountId: account.accountId, ip });
+  return jsonResponse({ ok: true, accountId: account.accountId, sessionId });
 }
