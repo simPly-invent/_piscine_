@@ -1,14 +1,5 @@
 /**
  * index.js — Cloudflare Worker entry point and request router.
- *
- * Every incoming request is:
- *   1. CORS pre-flighted (OPTIONS → 204)
- *   2. Rate-limited (sliding window per IP + per account)
- *   3. IP-reputation-checked (datacenter CIDR blocklist)
- *   4. Routed to the appropriate handler
- *
- * Security layers are applied in the middleware chain before the handler runs.
- * Each blocked request increases the session's anomaly score.
  */
 
 export { TicketCounter } from "./durable-objects/ticket-counter.js";
@@ -34,7 +25,6 @@ import { getIP, getUA, getSessionId, jsonResponse } from "./handlers/shared.js";
 
 export default {
   async fetch(request, env, ctx) {
-    // OPTIONS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -48,47 +38,34 @@ export default {
     }
 
     try {
+      const config = await getConfig(env);
+      const ip = getIP(request);
+      const ua = getUA(request);
+      const sessionId = getSessionId(request);
+      const url = new URL(request.url);
+      const path = url.pathname;
 
-    const config = await getConfig(env);
-    const ip = getIP(request);
-    const ua = getUA(request);
-    const sessionId = getSessionId(request);
-    const url = new URL(request.url);
-    const path = url.pathname;
-
-    // ── IP REPUTATION ────────────────────────────────────────────────────────
-    // /api/reset is exempt so the operator can always recover the simulation
-    if (path !== "/api/reset" && isDatacenterIP(ip)) {
-      ctx.waitUntil(
-        logRequest(env, { type: "blocked_datacenter_ip", ip, path })
-      );
-      if (sessionId) {
-        ctx.waitUntil(
-          applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.datacenter_ip])
-        );
+      // IP reputation check — exempt /api/reset so operator can always recover
+      if (path !== "/api/reset" && isDatacenterIP(ip)) {
+        ctx.waitUntil(logRequest(env, { type: "blocked_datacenter_ip", ip, path }));
+        if (sessionId) {
+          ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.datacenter_ip]));
+        }
+        return jsonResponse({ error: "forbidden", reason: "datacenter_ip" }, 403);
       }
-      return jsonResponse({ error: "forbidden", reason: "datacenter_ip" }, 403);
-    }
 
-    // ── RATE LIMITING ────────────────────────────────────────────────────────
-    const rateResult = await checkRateLimit(env, config, ip, sessionId);
-    if (rateResult.blocked) {
-      ctx.waitUntil(
-        logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path })
-      );
-      if (sessionId) {
-        ctx.waitUntil(
-          applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.rate_limit_violation])
-        );
+      // Rate limiting
+      const rateResult = await checkRateLimit(env, config, ip, sessionId);
+      if (rateResult.blocked) {
+        ctx.waitUntil(logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path }));
+        if (sessionId) {
+          ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.rate_limit_violation]));
+        }
+        return jsonResponse({ error: "rate_limited", retry_after_ms: rateResult.retryAfterMs }, 429);
       }
-      return jsonResponse(
-        { error: "rate_limited", retry_after_ms: rateResult.retryAfterMs },
-        429
-      );
-    }
 
-    // ── ROUTING ──────────────────────────────────────────────────────────────
-    if (path === "/api/auth/register" && request.method === "POST")
+      // Routing
+      if (path === "/api/auth/register" && request.method === "POST")
         return handleRegister(request, env, config);
 
       if (path === "/api/auth/login" && request.method === "POST")
