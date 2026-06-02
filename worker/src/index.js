@@ -55,9 +55,11 @@ export default {
         return jsonResponse({ error: "forbidden", reason: "datacenter_ip" }, 403);
       }
 
-      // Rate limiting — skip for anonymous GET requests to preserve KV write quota
-      const isAnonymousGet = request.method === "GET" && !sessionId;
-      if (!isAnonymousGet) {
+      // Rate limiting — only on POST (mutations: register, login, checkout).
+      // GET requests (browsing the event page, polling status) are reads and
+      // must not be throttled, otherwise normal navigation gets 429'd. The
+      // meaningful bot-abuse surface is the checkout/auth POSTs anyway.
+      if (request.method === "POST") {
         const rateResult = await checkRateLimit(env, config, ip, sessionId);
         if (rateResult.blocked) {
           ctx.waitUntil(logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path }));
