@@ -13,30 +13,33 @@
       <nav>
         <a href="index.html">Event</a>
         <a href="scoreboard.html">Scoreboard</a>
+        <a href="admin.html">Admin</a>
       </nav>
     </div>
   </header>
 
   <main class="container">
-    <div id="alert" class="alert" style="display:none"></div>
+    <div id="alert"      class="alert" style="display:none"></div>
+    <div id="status-bar" class="alert" style="display:none"></div>
 
     <!-- Queue overlay -->
     <div id="queue-overlay">
       <h2>You're in the queue</h2>
       <div id="queue-countdown">…</div>
-      <p>Hang tight. You'll be admitted shortly.</p>
-      <p class="dim" style="margin-top:1rem;font-size:11px">
-        Your queue position is randomised per session. This is a security layer — study it.
-      </p>
+      <p>Randomised delay — a security layer you must handle in your bot.</p>
     </div>
 
     <!-- Event banner -->
     <div class="event-banner">
       <h1 id="event-name">TicketStorm Live — Sold Out Tour</h1>
       <div class="meta" id="event-venue">The Concurrent Arena · 31 Dec 2025</div>
-      <div style="margin-top:1.5rem;display:flex;align-items:baseline;gap:.75rem">
+      <div style="margin-top:1.5rem;display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap">
         <span id="tickets-left" class="ticket-count">—</span>
         <span class="dim">tickets remaining</span>
+        <span id="tickets-pct" class="dim" style="font-size:12px"></span>
+      </div>
+      <div style="margin-top:.75rem;background:#111;border-radius:4px;height:6px;overflow:hidden;max-width:400px">
+        <div id="tickets-bar" style="height:100%;width:0%;background:#2ecc71;transition:width .5s,background .5s"></div>
       </div>
     </div>
 
@@ -44,7 +47,7 @@
       <!-- Left: seat map -->
       <div>
         <div class="card">
-          <h2>Seat Map</h2>
+          <h2>Seat Map <span class="dim" style="font-size:11px;font-weight:normal">click to select</span></h2>
           <div id="seat-map"></div>
           <div class="seat-legend">
             <span><span class="dot" style="background:#1e3a2e;border:1px solid #2ecc7144"></span> Available</span>
@@ -53,16 +56,15 @@
           </div>
           <div style="margin-top:1rem;display:flex;align-items:center;gap:1rem">
             <span class="dim">Selected: <strong id="selected-count">0</strong></span>
-            <button id="btn-checkout" class="btn btn-primary" disabled>
-              Checkout →
-            </button>
+            <button id="btn-checkout" class="btn btn-primary" disabled>Checkout →</button>
           </div>
         </div>
       </div>
 
-      <!-- Right: login / register -->
+      <!-- Right: auth + defenses -->
       <div>
-        <div class="card" id="auth-card">
+        <!-- Auth form -->
+        <div class="card" id="auth-form">
           <h2>Account</h2>
           <div class="form-group">
             <label>Username (register only)</label>
@@ -77,34 +79,45 @@
             <input type="password" id="inp-password" placeholder="••••••••">
           </div>
           <div style="display:flex;gap:.75rem">
-            <button id="btn-login" class="btn btn-primary">Log in</button>
+            <button id="btn-login"    class="btn btn-primary">Log in</button>
             <button id="btn-register" class="btn btn-secondary">Register</button>
           </div>
         </div>
 
+        <!-- Logged-in state -->
+        <div class="card" id="logged-in-info" style="display:none">
+          <h2>Account</h2>
+          <p class="dim" style="font-size:13px">Logged in as <code id="current-account"></code></p>
+          <div style="margin-top:1rem;display:flex;gap:.75rem">
+            <a href="scoreboard.html" class="btn btn-secondary">My Score →</a>
+            <button id="btn-logout" class="btn btn-secondary">Log out</button>
+          </div>
+        </div>
+
+        <!-- Defense layers -->
         <div class="card" style="font-size:12px;color:var(--text-dim)">
-          <h2>Defend yourself</h2>
-          <p>This simulation has active bot defenses:</p>
-          <ul style="margin-top:.75rem;padding-left:1.2rem;line-height:1.8">
-            <li>Rate limiting (sliding window)</li>
-            <li>Proof-of-work CAPTCHA on checkout</li>
-            <li>Honeypot form fields</li>
-            <li>Behavioral timing analysis</li>
-            <li>Canvas device fingerprinting</li>
-            <li>Single-use, 30s checkout tokens</li>
-            <li>Datacenter IP blocklist</li>
-            <li>Virtual waiting room</li>
-            <li>Session IP+UA binding</li>
-            <li>Anomaly scoring (0–100)</li>
-          </ul>
+          <h2>Active Defenses</h2>
+          <table style="width:100%;border-collapse:collapse;line-height:1.9">
+            <tr><td style="color:var(--accent)">●</td><td>Rate limiting — sliding window</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Proof-of-work CAPTCHA</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Honeypot hidden fields</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Behavioral timing analysis</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Canvas device fingerprinting</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>30s single-use checkout tokens</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Datacenter IP blocklist</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Virtual waiting room</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Session IP + UA binding</td></tr>
+            <tr><td style="color:var(--accent)">●</td><td>Anomaly scoring (0–100)</td></tr>
+          </table>
           <p style="margin-top:.75rem">
-            Visit the <a href="scoreboard.html">scoreboard</a> to track your anomaly score.
+            Study each layer in <code>worker/src/security/</code>.
+            See your score on the <a href="scoreboard.html">scoreboard</a>.
           </p>
         </div>
       </div>
     </div>
   </main>
 
-  <script type="module" src="js/app.js?v=2"></script>
+  <script type="module" src="js/app.js?v=3"></script>
 </body>
 </html>

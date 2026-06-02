@@ -18,6 +18,7 @@ import {
   handleGetCaptcha,
   handleGetHoneypot,
   handleGetSession,
+  handleAdmin,
 } from "./handlers/api.js";
 import { handleScoreboard } from "./handlers/scoreboard.js";
 import { logRequest } from "./utils/logger.js";
@@ -106,6 +107,9 @@ export default {
 
       if (path === "/events/scoreboard")
         return handleScoreboard(request, env);
+
+      if (path === "/api/admin" && request.method === "GET")
+        return handleAdmin(request, env, config);
 
       return jsonResponse({ error: "not_found" }, 404);
 

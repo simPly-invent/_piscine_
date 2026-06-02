@@ -1,5 +1,6 @@
 /**
- * api.js — /api/status, /api/reset, /api/logs, /api/queue/status
+ * api.js — /api/status, /api/reset, /api/logs, /api/queue/status,
+ *           /api/admin (config panel), /api/anomaly/:sessionId
  */
 
 import { getLogs, clearLogs } from "../utils/logger.js";
@@ -13,43 +14,58 @@ import { issueCaptcha } from "../security/captcha.js";
 import { issueHoneypotConfig } from "../security/honeypot.js";
 
 export async function handleStatus(request, env, config) {
-  const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
-  const res = await counterStub.fetch("http://do/counter", {
-    method: "POST",
-    body: JSON.stringify({ action: "status" }),
-  });
-  const { count, total, purchases } = await res.json();
+  let count = 0, total = 0, purchases = {};
+  try {
+    const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
+    const res = await counterStub.fetch("http://do/counter", {
+      method: "POST",
+      body: JSON.stringify({ action: "status" }),
+    });
+    ({ count, total, purchases } = await res.json());
+  } catch (_) {}
 
   const sim = (await env.KV.get("simulation", "json")) || {};
   const nowMs = Date.now();
-
-  // Compute bot state by replaying the pre-generated schedule
   const botState = await getBotState(env, total, config, nowMs);
 
-  // Human purchases = total - remaining - bot purchases
-  const humanPurchases = total - count - botState.totalBotTickets;
+  const humanPurchases = Math.max(0, total - count - botState.totalBotTickets);
+  const elapsed = sim.startedAt ? nowMs - sim.startedAt : 0;
+  const timeLeft = sim.startedAt
+    ? Math.max(0, config.session_ttl_seconds * 1000 - elapsed)
+    : 0;
 
   return jsonResponse({
     simulation: {
       started_at: sim.startedAt,
-      elapsed_ms: sim.startedAt ? nowMs - sim.startedAt : 0,
+      elapsed_ms: elapsed,
+      time_left_ms: timeLeft,
+      active: !!sim.startedAt,
     },
     tickets: {
       total,
       remaining: Math.max(0, count - botState.totalBotTickets),
-      taken: total - count + botState.totalBotTickets,
-      human_purchases: Math.max(0, humanPurchases),
-      bot_purchases: botState.totalBotTickets,
+      taken_by_humans: humanPurchases,
+      taken_by_bots: botState.totalBotTickets,
+      sold_out: count === 0,
     },
     config: {
       difficulty: config.difficulty,
       defender_bots: config.defender_bots_count,
       captcha_enabled: config.captcha_enabled,
+      captcha_pow_zeros: config.captcha_pow_zeros,
+      fingerprinting_enabled: config.fingerprinting_enabled,
+      rate_limit_rps: config.rate_limit_requests_per_second,
+      anomaly_ban_threshold: config.anomaly_ban_threshold,
+      checkout_token_ttl: config.checkout_token_ttl_seconds,
     },
     bot_activity: Object.entries(botState.botAccounts)
       .filter(([, v]) => v.bought > 0)
-      .slice(0, 20) // show up to 20 active bots
-      .map(([id, v]) => ({ id: id.slice(0, 8) + "…", type: v.type, bought: v.bought })),
+      .slice(0, 30)
+      .map(([id, v]) => ({ id: id.slice(0, 10) + "…", type: v.type, bought: v.bought })),
+    // Per-account purchases for scoreboard
+    human_accounts: Object.entries(purchases)
+      .filter(([id]) => !id.startsWith("bot_"))
+      .map(([id, count]) => ({ id: id.slice(0, 10) + "…", bought: count })),
   });
 }
 
@@ -65,43 +81,53 @@ export async function handleReset(request, env) {
   const newConfig = { ...DEFAULTS, ...(body.config || {}) };
   await setConfig(env, newConfig);
 
-  // Reset Durable Object counter
   const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
   await counterStub.fetch("http://do/counter", {
-    method: "POST",
-    body: JSON.stringify({ action: "reset" }),
+    method: "POST", body: JSON.stringify({ action: "reset" }),
   });
   await counterStub.fetch("http://do/counter", {
-    method: "POST",
-    body: JSON.stringify({ action: "init", amount: newConfig.tickets_total }),
+    method: "POST", body: JSON.stringify({ action: "init", amount: newConfig.tickets_total }),
   });
   await counterStub.fetch("http://do/counter", {
-    method: "POST",
-    body: JSON.stringify({ action: "set_config", amount: newConfig.max_tickets_per_account }),
+    method: "POST", body: JSON.stringify({ action: "set_config", amount: newConfig.max_tickets_per_account }),
   });
 
-  // Clear KV state
   await clearLogs(env);
   await env.KV.delete("taken_seats");
   await env.KV.delete("bot_schedule");
 
-  // Generate fresh bot schedule
   const startedAt = Date.now();
   await env.KV.put("simulation", JSON.stringify({ startedAt }), {
     expirationTtl: newConfig.session_ttl_seconds + 300,
   });
   await initBotSchedule(env, newConfig, startedAt);
 
-  return jsonResponse({ ok: true, message: "simulation reset", started_at: startedAt });
+  return jsonResponse({
+    ok: true,
+    message: "simulation reset",
+    started_at: startedAt,
+    config: newConfig,
+  });
 }
 
 export async function handleLogs(request, env, config) {
   const logs = await getLogs(env);
   const url = new URL(request.url);
-  const limit = parseInt(url.searchParams.get("limit") || "100", 10);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "200", 10), 500);
   const type = url.searchParams.get("type");
-  const filtered = type ? logs.filter((l) => l.type === type) : logs;
-  return jsonResponse({ logs: filtered.slice(-limit), total: filtered.length });
+  const filtered = type ? logs.filter(l => l.type === type) : logs;
+
+  // Aggregate stats
+  const stats = filtered.reduce((acc, l) => {
+    acc[l.type] = (acc[l.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  return jsonResponse({
+    logs: filtered.slice(-limit).reverse(), // newest first
+    total: filtered.length,
+    stats,
+  });
 }
 
 export async function handleQueueStatus(request, env) {
@@ -129,11 +155,24 @@ export async function handleGetSession(request, env) {
   if (!sessionId) return jsonResponse({ error: "no_session" }, 400);
   const session = await getSession(env, sessionId);
   if (!session) return jsonResponse({ error: "session_not_found" }, 404);
-  // Don't expose IP/UA of other users — only safe fields
   return jsonResponse({
     sessionId: session.sessionId,
     anomalyScore: session.anomalyScore,
     banned: session.banned,
     createdAt: session.createdAt,
+  });
+}
+
+/** GET /api/admin — returns full config + live stats (protected by reset secret) */
+export async function handleAdmin(request, env, config) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || request.headers.get("X-Reset-Secret") || "";
+  const expectedSecret = env.RESET_SECRET || DEFAULTS.reset_secret;
+  if (!safeEqual(secret, expectedSecret)) {
+    return jsonResponse({ error: "invalid_secret" }, 403);
+  }
+  return jsonResponse({
+    config,
+    difficulty_presets: ["easy", "medium", "hard", "nightmare"],
   });
 }

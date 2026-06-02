@@ -2,14 +2,9 @@
  * tickets.js — event info, seat map, checkout initiation and completion.
  *
  * CHECKOUT FLOW:
- *   1. GET  /api/event           → event details + available seat list
+ *   1. GET  /api/event           → event details + seat map
  *   2. POST /api/checkout/init   → get checkout token + CAPTCHA challenge
- *      Body: { sessionId, seats: [seatId, ...] }
- *   3. POST /api/checkout/complete → buy the tickets
- *      Body: { sessionId, checkoutToken, captchaChallenge, captchaSolution, payment }
- *
- * Every step goes through the full security pipeline.  Any failed check
- * increases the anomaly score.
+ *   3. POST /api/checkout/complete → buy tickets (atomic via Durable Object)
  */
 
 import { issueCheckoutToken, consumeCheckoutToken } from "../security/token-rotation.js";
@@ -18,7 +13,7 @@ import { issueCaptcha, validateCaptcha } from "../security/captcha.js";
 import { checkHoneypot } from "../security/honeypot.js";
 import { analyzeSession, recordAction } from "../security/behavioral.js";
 import { checkFingerprint } from "../security/fingerprint.js";
-import { validateSessionBinding, getSession, updateAnomalyScore } from "../security/session-binding.js";
+import { validateSessionBinding, getSession } from "../security/session-binding.js";
 import { applyScoreDeltas, SCORE_DELTAS } from "../security/anomaly-score.js";
 import { logRequest } from "../utils/logger.js";
 import { jsonResponse, getIP, getUA, getSessionId } from "./shared.js";
@@ -26,6 +21,7 @@ import { enqueue, checkQueue } from "../security/queue.js";
 
 export async function handleGetEvent(request, env, config) {
   const sessionId = getSessionId(request);
+
   if (sessionId) {
     await recordAction(env, sessionId, "event_view", Date.now());
     const queue = await enqueue(env, config, sessionId);
@@ -34,25 +30,41 @@ export async function handleGetEvent(request, env, config) {
     }
   }
 
-  const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
-  const res = await counterStub.fetch("http://do/counter", {
-    method: "POST",
-    body: JSON.stringify({ action: "status" }),
-  });
-  const { count, total } = await res.json();
+  // Get ticket counter — fallback gracefully if DO not initialized yet
+  let count = 0, total = 0;
+  try {
+    const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
+    const res = await counterStub.fetch("http://do/counter", {
+      method: "POST",
+      body: JSON.stringify({ action: "status" }),
+    });
+    const data = await res.json();
+    count = data.count ?? 0;
+    total = data.total ?? 0;
+  } catch (e) {
+    // DO not initialized — return empty state without crashing
+    return jsonResponse({
+      event: eventInfo(),
+      tickets_remaining: 0,
+      tickets_total: 0,
+      seats: [],
+      not_initialized: true,
+    });
+  }
 
-  const sim = (await env.KV.get("simulation", "json")) || {};
-  const { totalBotTickets } = await getBotState(env, total, config, Date.now());
+  // Bot state for adjusted remaining count
+  let totalBotTickets = 0;
+  try {
+    const sim = (await env.KV.get("simulation", "json")) || {};
+    const botState = await getBotState(env, total, config, Date.now());
+    totalBotTickets = botState.totalBotTickets;
+  } catch (_) {}
 
   const takenSeats = (await env.KV.get("taken_seats", "json")) || [];
   const seats = buildSeatMap(total, takenSeats);
 
   return jsonResponse({
-    event: {
-      name: "TicketStorm Live — Sold Out Tour",
-      venue: "The Concurrent Arena",
-      date: "2025-12-31T21:00:00Z",
-    },
+    event: eventInfo(),
     tickets_remaining: Math.max(0, count - totalBotTickets),
     tickets_total: total,
     seats,
@@ -71,11 +83,10 @@ export async function handleCheckoutInit(request, env, config) {
 
   const binding = await validateSessionBinding(env, sessionId, ip, ua);
   if (!binding.valid) return jsonResponse({ error: binding.reason }, 401);
+  if (binding.session.banned) {
+    return jsonResponse({ error: "session_banned", anomalyScore: binding.session.anomalyScore }, 403);
+  }
 
-  const session = binding.session;
-  if (session.banned) return jsonResponse({ error: "session_banned", anomalyScore: session.anomalyScore }, 403);
-
-  // Queue check
   const queue = await checkQueue(env, sessionId);
   if (!queue.admitted) {
     return jsonResponse({ queued: true, waitMs: queue.waitMs });
@@ -84,11 +95,9 @@ export async function handleCheckoutInit(request, env, config) {
   const deltas = [];
   if (binding.anomalyDelta > 0) deltas.push(binding.anomalyDelta);
 
-  // Fingerprint check
   const fpResult = await checkFingerprint(env, config, sessionId, canvasFingerprint, request);
   if (fpResult.score > 0) deltas.push(fpResult.score);
 
-  // Behavioral analysis
   await recordAction(env, sessionId, "checkout_init", Date.now());
   const behResult = await analyzeSession(env, sessionId, config);
   if (behResult.suspicious) deltas.push(SCORE_DELTAS.behavioral_flag);
@@ -100,7 +109,7 @@ export async function handleCheckoutInit(request, env, config) {
     }
   }
 
-  const { token, expires_in } = await issueCheckoutToken(env, config, sessionId, session.accountId, seats);
+  const { token, expires_in } = await issueCheckoutToken(env, config, sessionId, binding.session.accountId, seats);
   const captcha = await issueCaptcha(env, config);
 
   await logRequest(env, { type: "checkout_init", sessionId, ip, seats });
@@ -117,7 +126,6 @@ export async function handleCheckoutComplete(request, env, config) {
     return jsonResponse({ error: "missing_fields" }, 400);
   }
 
-  // Session binding
   const binding = await validateSessionBinding(env, sessionId, ip, ua);
   if (!binding.valid) return jsonResponse({ error: binding.reason }, 401);
   if (binding.session.banned) {
@@ -132,18 +140,18 @@ export async function handleCheckoutComplete(request, env, config) {
   if (honeypotTriggered) {
     deltas.push(SCORE_DELTAS.honeypot_triggered);
     await applyScoreDeltas(env, config, sessionId, deltas);
-    await logRequest(env, { type: "honeypot", sessionId, ip });
-    return jsonResponse({ error: "checkout_failed" }, 400);
+    await logRequest(env, { type: "honeypot_triggered", sessionId, ip });
+    return jsonResponse({ error: "checkout_failed", reason: "validation_error" }, 400);
   }
 
-  // CAPTCHA validation
+  // CAPTCHA
   const captchaResult = await validateCaptcha(env, config, captchaChallenge, captchaSolution);
   if (!captchaResult.valid) {
     await logRequest(env, { type: "captcha_fail", reason: captchaResult.reason, sessionId, ip });
     return jsonResponse({ error: "captcha_failed", reason: captchaResult.reason }, 400);
   }
 
-  // Token consumption (single-use, TTL, session binding)
+  // Token
   const tokenResult = await consumeCheckoutToken(env, checkoutToken, sessionId);
   if (!tokenResult.valid) {
     if (tokenResult.anomalyScore) deltas.push(tokenResult.anomalyScore);
@@ -151,17 +159,20 @@ export async function handleCheckoutComplete(request, env, config) {
     return jsonResponse({ error: tokenResult.reason }, 400);
   }
 
-  // Behavioral timing check
+  // Behavioral timing
   await recordAction(env, sessionId, "checkout_complete", Date.now());
   const behResult = await analyzeSession(env, sessionId, config);
-  if (behResult.suspicious) deltas.push(SCORE_DELTAS.behavioral_flag);
+  if (behResult.suspicious) {
+    deltas.push(SCORE_DELTAS.behavioral_flag);
+    await logRequest(env, { type: "behavioral_flag", reasons: behResult.reasons, sessionId, ip });
+  }
 
-  // Payment validation (fake but required)
-  if (!payment || !payment.card_number || !payment.expiry || !payment.cvv) {
+  // Payment validation
+  if (!payment?.card_number || !payment?.expiry || !payment?.cvv) {
     return jsonResponse({ error: "payment_invalid" }, 400);
   }
 
-  // Atomic ticket decrement via Durable Object
+  // Atomic ticket decrement
   const counterStub = env.TICKET_COUNTER.get(env.TICKET_COUNTER.idFromName("global"));
   const res = await counterStub.fetch("http://do/counter", {
     method: "POST",
@@ -177,24 +188,23 @@ export async function handleCheckoutComplete(request, env, config) {
     return jsonResponse({ error: result.reason, remaining: result.remaining }, 409);
   }
 
-  // Update taken seats in KV
   const takenSeats = (await env.KV.get("taken_seats", "json")) || [];
   takenSeats.push(...tokenResult.seats);
-  await env.KV.put("taken_seats", JSON.stringify(takenSeats));
+  await env.KV.put("taken_seats", JSON.stringify(takenSeats), { expirationTtl: 86400 });
 
-  // Apply any accumulated anomaly score
   if (deltas.length > 0) {
     await applyScoreDeltas(env, config, sessionId, deltas);
   }
 
   const session = await getSession(env, sessionId);
   await logRequest(env, {
-    type: "purchase",
+    type: "purchase_success",
     sessionId,
     accountId: tokenResult.accountId,
     seats: tokenResult.seats,
     ip,
     remaining: result.remaining,
+    anomalyScore: session?.anomalyScore ?? 0,
   });
 
   return jsonResponse({
@@ -206,18 +216,23 @@ export async function handleCheckoutComplete(request, env, config) {
   });
 }
 
+function eventInfo() {
+  return {
+    name: "TicketStorm Live — Sold Out Tour",
+    venue: "The Concurrent Arena",
+    date: "2025-12-31T21:00:00Z",
+  };
+}
+
 function buildSeatMap(total, takenSeats) {
+  if (!total) return [];
   const takenSet = new Set(takenSeats);
   const seats = [];
   for (let i = 1; i <= total; i++) {
     const row = String.fromCharCode(65 + Math.floor((i - 1) / 10));
     const col = ((i - 1) % 10) + 1;
-    seats.push({
-      id: `${row}${col}`,
-      row,
-      col,
-      status: takenSet.has(`${row}${col}`) ? "taken" : "available",
-    });
+    const id = `${row}${col}`;
+    seats.push({ id, row, col, status: takenSet.has(id) ? "taken" : "available" });
   }
   return seats;
 }

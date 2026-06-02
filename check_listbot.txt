@@ -1,0 +1,67 @@
+Checklist bot TicketStorm — Python
+
+---
+Setup
+
+- [] pip install aiohttp asyncio
+- [ ] Variable API_URL = "https://ticketstorm.dbenaissi.workers.dev"
+- [ ] Variable NB_ACCOUNTS = 5 (commence petit)
+
+---
+Fonction 1 — solve_pow(challenge, zeros) → str
+
+Boucle SHA-256 jusqu'à trouver un nonce dont le hash commence par N zéros.
+Yield le contrôle avec await asyncio.sleep(0) tous les 10 000 tours.
+
+---
+Fonction 2 — register(session) → (account_id, session_id)
+
+POST /api/auth/register avec username/email/password aléatoires.
+Retourne le sessionId.
+
+---
+Fonction 3 — get_event(session, session_id) → seats[]
+
+GET /api/event avec header Authorization: Bearer {session_id}.
+Filtre status == "available", prend les 2 premiers.
+Si queued == true dans la réponse → attendre waitMs ms et retry.
+
+---
+Fonction 4 — checkout_init(session, session_id, seats) → (token, captcha)
+
+POST /api/checkout/init avec {sessionId, seats}.
+Retourne checkoutToken et l'objet captcha {challenge, zeros}.
+
+---
+Fonction 5 — checkout_complete(session, session_id, token, challenge, solution) → result
+
+POST /api/checkout/complete avec tous les champs :
+- sessionId, checkoutToken
+- captchaChallenge, captchaSolution
+- payment (fake mais tous les champs requis)
+- Les champs honeypot — GET /api/honeypot d'abord pour savoir lesquels laisser vides.
+
+---
+Fonction 6 — run_account(session, account_num) → result
+
+Pipeline complet dans l'ordre :
+1. register()
+2. get_event() → seats
+3. En parallèle : checkout_init() + commencer solve_pow() dès que le challenge arrive
+4. checkout_complete()
+5. Logger le résultat
+
+---
+Fonction 7 — main()
+
+Crée une aiohttp.ClientSession.
+Lance NB_ACCOUNTS fois run_account() avec asyncio.gather().
+Affiche un résumé : tickets achetés / anomaly score / erreurs.
+
+---
+Pièges à éviter
+
+- Ne pas oublier le header Authorization sur chaque requête après login
+- Lire /api/honeypot et ne pas remplir ces champs dans le checkout
+- Le checkoutToken expire en 30s — résoudre le PoW avant de lancer checkout_init est impossible, mais être rapide après compte
+- Checker anomalyScore dans la réponse — si > 50 tu perds même si tu as le ticket

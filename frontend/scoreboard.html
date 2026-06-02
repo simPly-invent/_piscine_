@@ -12,92 +12,101 @@
       <span class="logo">⚡ TicketStorm</span>
       <nav>
         <a href="index.html">Event</a>
+        <a href="admin.html">Admin</a>
         <span id="conn-status" style="color:var(--text-dim);font-size:12px;margin-left:1.5rem">Connecting…</span>
       </nav>
     </div>
   </header>
 
   <main class="container">
-    <!-- Ticket stats -->
+    <!-- Main stats -->
     <div class="score-grid">
       <div class="score-cell">
         <div class="val" id="val-remaining">—</div>
         <div class="lbl">Tickets Remaining</div>
+        <div style="margin-top:.5rem;background:#222;border-radius:3px;height:4px;overflow:hidden">
+          <div id="remaining-bar" style="height:100%;background:#2ecc71;transition:width .5s"></div>
+        </div>
       </div>
       <div class="score-cell">
-        <div class="val" id="val-human-purchases">—</div>
+        <div class="val" id="val-human">—</div>
         <div class="lbl">Human Purchases</div>
       </div>
       <div class="score-cell">
-        <div class="val" id="val-bot-purchases">—</div>
+        <div class="val" id="val-bot">—</div>
         <div class="lbl">Bot Purchases</div>
       </div>
       <div class="score-cell">
-        <div class="val" id="val-total">—</div>
-        <div class="lbl">Total Tickets</div>
+        <div class="val" id="val-elapsed">—</div>
+        <div class="lbl">Elapsed</div>
       </div>
     </div>
 
     <div class="two-col">
-      <!-- Your session stats -->
+      <!-- Your session -->
       <div class="card">
         <h2>Your Session</h2>
-        <div style="margin-bottom:1rem">
-          <span class="dim">Anomaly Score: </span>
-          <strong id="val-anomaly">—</strong> / 100
+        <div style="margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between">
+          <span class="dim">Anomaly Score</span>
+          <span><strong id="val-anomaly">—</strong> / 100</span>
         </div>
         <div class="anomaly-bar">
           <div id="anomaly-fill" class="anomaly-fill" style="width:0%"></div>
         </div>
-        <div style="margin-top:1rem;font-size:13px">
-          <span class="dim">Status: </span>
+
+        <!-- Score breakdown -->
+        <div id="score-breakdown" style="margin-top:1rem;font-size:11px;color:var(--text-dim)"></div>
+
+        <div style="margin-top:1rem;font-size:13px;display:flex;align-items:center;gap:.5rem">
+          <span class="dim">Status:</span>
           <span id="banned-status">Unknown</span>
         </div>
-        <div style="margin-top:1.5rem;font-size:12px;color:var(--text-dim)">
-          <strong>Win condition:</strong> Secure tickets while keeping your anomaly
-          score below 50 and avoiding an IP ban.
+        <div style="margin-top:.5rem;font-size:11px;padding:.5rem;background:#111;border-radius:4px;color:var(--text-dim)">
+          Win: buy tickets · anomaly &lt; 50 · not banned
+        </div>
+
+        <!-- Difficulty badge -->
+        <div style="margin-top:1rem">
+          <span class="dim" style="font-size:11px">Current difficulty: </span>
+          <span id="val-difficulty" style="font-size:11px;color:var(--accent)">—</span>
         </div>
       </div>
 
-      <!-- Bot activity feed -->
+      <!-- Bot activity -->
       <div class="card">
         <h2>Bot Activity Feed</h2>
-        <ul id="bot-feed">
-          <li><span class="ts">—</span>Waiting for activity…</li>
-        </ul>
+        <ul id="bot-feed" style="list-style:none;font-size:12px;max-height:220px;overflow-y:auto;padding:0"></ul>
       </div>
     </div>
 
-    <!-- API reference -->
+    <!-- API Reference -->
     <div class="card" style="font-size:12px">
-      <h2>API Reference (for bot authors)</h2>
+      <h2>API Reference — Bot Checklist</h2>
       <table style="width:100%;border-collapse:collapse">
         <thead>
           <tr style="color:var(--text-dim);text-align:left">
+            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">#</th>
             <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Endpoint</th>
             <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Method</th>
-            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Description</th>
+            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Purpose</th>
+            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Bypass hint</th>
           </tr>
         </thead>
-        <tbody>
-          <tr><td style="padding:.4rem .5rem">/api/auth/register</td><td>POST</td><td>Create account → {accountId, sessionId}</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/auth/login</td><td>POST</td><td>Login → {sessionId}</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/event</td><td>GET</td><td>Event info + seat map</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/captcha</td><td>GET</td><td>Get PoW challenge</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/honeypot</td><td>GET</td><td>Get honeypot field names to skip</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/checkout/init</td><td>POST</td><td>Get checkout token + CAPTCHA</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/checkout/complete</td><td>POST</td><td>Buy tickets (atomic)</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/queue/status</td><td>GET</td><td>Check queue admission</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/session</td><td>GET</td><td>Your current anomaly score</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/status</td><td>GET</td><td>Full simulation state (JSON)</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/logs</td><td>GET</td><td>Request logs for analysis</td></tr>
-          <tr><td style="padding:.4rem .5rem">/api/reset</td><td>POST</td><td>Reset simulation (needs secret)</td></tr>
-          <tr><td style="padding:.4rem .5rem">/events/scoreboard</td><td>GET</td><td>SSE stream (this page)</td></tr>
+        <tbody id="api-table">
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">1</td><td>/api/auth/register</td><td>POST</td><td>Create account</td><td>Randomise email/username</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">2</td><td>/api/event</td><td>GET</td><td>Seat map + count</td><td>Check <code>queued</code> field</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">3</td><td>/api/queue/status</td><td>GET</td><td>Queue admission</td><td>Poll until <code>admitted:true</code></td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">4</td><td>/api/honeypot</td><td>GET</td><td>Hidden field names</td><td>Leave these fields empty</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">5</td><td>/api/checkout/init</td><td>POST</td><td>Token + CAPTCHA</td><td>Start PoW immediately</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">6</td><td>/api/checkout/complete</td><td>POST</td><td>Buy tickets</td><td>All fields required, PoW solution</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">—</td><td>/api/session</td><td>GET</td><td>Your anomaly score</td><td>Keep below 50</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">—</td><td>/api/status</td><td>GET</td><td>Full sim state</td><td>Track remaining tickets</td></tr>
+          <tr><td style="padding:.35rem .5rem;color:var(--text-dim)">—</td><td>/api/logs</td><td>GET</td><td>Request logs</td><td>Analyse what triggered flags</td></tr>
         </tbody>
       </table>
     </div>
   </main>
 
-  <script type="module" src="js/scoreboard.js"></script>
+  <script type="module" src="js/scoreboard.js?v=2"></script>
 </body>
 </html>
