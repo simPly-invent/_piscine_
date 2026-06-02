@@ -47,6 +47,9 @@ export default {
       });
     }
 
+    // Wrap everything so CORS headers are always present even on crashes
+    try {
+
     const config = await getConfig(env);
     const ip = getIP(request);
     const ua = getUA(request);
@@ -127,9 +130,10 @@ export default {
         return handleScoreboard(request, env);
 
       return jsonResponse({ error: "not_found" }, 404);
+
     } catch (err) {
       console.error(err);
-      return jsonResponse({ error: "internal_error" }, 500);
+      return jsonResponse({ error: "internal_error", message: err.message }, 500);
     }
   },
 };
