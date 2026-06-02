@@ -26,7 +26,3 @@ ENVIRONMENT = "production"
 # Set via: wrangler secret put RESET_SECRET
 # [secrets]
 # RESET_SECRET
-
-[site]
-# Uncomment if you want to serve the frontend from the worker itself (optional).
-# bucket = "../frontend"
