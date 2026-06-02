@@ -51,7 +51,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
+        run: |
+          npx wrangler deploy
+          echo "${{ secrets.RESET_SECRET }}" | npx wrangler secret put RESET_SECRET
 
       # Workers URLs follow a deterministic pattern: {name}.{subdomain}.workers.dev
       # We derive it from the wrangler.toml name + the account subdomain stored in secrets.
