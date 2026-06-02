@@ -11,7 +11,7 @@ export const DEFAULTS = {
   max_tickets_per_account: 2,
   max_accounts_per_ip: 3,
   defender_bots_count: 20,
-  difficulty: "medium",
+  difficulty: "easy",
   session_ttl_seconds: 1800,
   checkout_token_ttl_seconds: 30,
   rate_limit_requests_per_second: 10,
