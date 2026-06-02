@@ -181,4 +181,4 @@ function showAlert(msg, type = "error") {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadEvent();
-setInterval(loadEvent, 5000); // refresh every 5s to keep seat map live
+setInterval(loadEvent, 30000); // 30s to preserve KV write quota (free tier: 1k writes/day)

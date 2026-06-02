@@ -54,14 +54,17 @@ export default {
         return jsonResponse({ error: "forbidden", reason: "datacenter_ip" }, 403);
       }
 
-      // Rate limiting
-      const rateResult = await checkRateLimit(env, config, ip, sessionId);
-      if (rateResult.blocked) {
-        ctx.waitUntil(logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path }));
-        if (sessionId) {
-          ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.rate_limit_violation]));
+      // Rate limiting — skip for anonymous GET requests to preserve KV write quota
+      const isAnonymousGet = request.method === "GET" && !sessionId;
+      if (!isAnonymousGet) {
+        const rateResult = await checkRateLimit(env, config, ip, sessionId);
+        if (rateResult.blocked) {
+          ctx.waitUntil(logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path }));
+          if (sessionId) {
+            ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.rate_limit_violation]));
+          }
+          return jsonResponse({ error: "rate_limited", retry_after_ms: rateResult.retryAfterMs }, 429);
         }
-        return jsonResponse({ error: "rate_limited", retry_after_ms: rateResult.retryAfterMs }, 429);
       }
 
       // Routing
