@@ -12,7 +12,7 @@ function authHeaders() {
   if (sessionId) h["Authorization"] = `Bearer ${sessionId}`;
   return h;
 }
-
+// commentary test
 // ── Canvas Fingerprint ────────────────────────────────────────────────────────
 // Renders a specific string to an off-screen canvas and hashes the pixel data.
 // The pixel output varies by OS/GPU/browser due to sub-pixel font rendering.
@@ -51,10 +51,11 @@ async function loadEvent() {
     return;
   }
 
-  document.getElementById("tickets-left").textContent = data.tickets.remaining;
+  const remaining = data.tickets_remaining ?? 0;
+  document.getElementById("tickets-left").textContent = remaining;
   document.getElementById("tickets-left").className =
     "ticket-count" +
-    (data.tickets.remaining < 20 ? " critical" : data.tickets.remaining < 50 ? " low" : "");
+    (remaining < 20 ? " critical" : remaining < 50 ? " low" : "");
   document.getElementById("event-name").textContent = data.event.name;
   document.getElementById("event-venue").textContent = data.event.venue;
 
