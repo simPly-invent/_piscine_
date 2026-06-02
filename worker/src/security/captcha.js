@@ -60,7 +60,7 @@ export async function validateCaptcha(env, config, challenge, solution) {
   await env.KV.put(
     `captcha:${challenge}`,
     JSON.stringify({ ...stored, used: true }),
-    { expirationTtl: 10 }
+    { expirationTtl: 60 }
   );
 
   return { valid: true };

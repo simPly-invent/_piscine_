@@ -38,7 +38,7 @@ export async function issueCheckoutToken(env, config, sessionId, accountId, seat
       expiresAt: Date.now() + ttl * 1000,
       used: false,
     }),
-    { expirationTtl: ttl + 5 }
+    { expirationTtl: Math.max(60, ttl + 5) }
   );
 
   return { token, expires_in: ttl };
@@ -60,7 +60,7 @@ export async function consumeCheckoutToken(env, token, sessionId) {
   await env.KV.put(
     `ct:${token}`,
     JSON.stringify({ ...stored, used: true }),
-    { expirationTtl: 10 }
+    { expirationTtl: 60 }
   );
 
   return { valid: true, accountId: stored.accountId, seats: stored.seats };

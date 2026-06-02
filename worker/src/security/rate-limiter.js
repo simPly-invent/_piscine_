@@ -60,6 +60,6 @@ async function slideWindow(env, key, now, windowMs, limit) {
 
   timestamps.push(now);
   // TTL slightly longer than the window so KV auto-cleans up
-  await env.KV.put(key, JSON.stringify(timestamps), { expirationTtl: 10 });
+  await env.KV.put(key, JSON.stringify(timestamps), { expirationTtl: 60 });
   return { blocked: false, remaining: limit - timestamps.length };
 }
