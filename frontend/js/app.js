@@ -1,7 +1,7 @@
 /**
  * app.js — event page: seat map, queue handling, session management.
  */
-import { API_URL } from "./config.js";
+import { API_URL } from "./config.js?v=4";
 
 // ── Session ───────────────────────────────────────────────────────────────────
 let sessionId = localStorage.getItem("ts_session");

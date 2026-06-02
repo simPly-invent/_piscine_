@@ -10,7 +10,7 @@
  *   3. Submit         → POST with all required fields
  */
 
-import { API_URL } from "./config.js";
+import { API_URL } from "./config.js?v=4";
 
 const sessionId = localStorage.getItem("ts_session");
 const seats = JSON.parse(sessionStorage.getItem("ts_seats") || "[]");

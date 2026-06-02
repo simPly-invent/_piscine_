@@ -1,7 +1,7 @@
 /**
  * scoreboard.js — SSE live scoreboard with session anomaly score.
  */
-import { API_URL } from "./config.js";
+import { API_URL } from "./config.js?v=4";
 
 const sessionId = localStorage.getItem("ts_session");
 
