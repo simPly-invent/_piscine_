@@ -12,7 +12,7 @@ class_name = "TicketCounter"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["TicketCounter"]
+new_sqlite_classes = ["TicketCounter"]
 
 # KV namespace for sessions, accounts, rate-limit windows, logs.
 # Create with: wrangler kv:namespace create TICKETSTORM_KV
