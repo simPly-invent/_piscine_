@@ -12,6 +12,7 @@ import { checkQueue } from "../security/queue.js";
 import { getSession } from "../security/session-binding.js";
 import { issueCaptcha } from "../security/captcha.js";
 import { issueHoneypotConfig } from "../security/honeypot.js";
+import { _resetRateLimiterMemory } from "../security/rate-limiter.js";
 
 export async function handleStatus(request, env, config) {
   let count = 0, total = 0, purchases = {};
@@ -108,6 +109,58 @@ export async function handleReset(request, env) {
     started_at: startedAt,
     config: newConfig,
   });
+}
+
+/**
+ * POST /api/admin/reset-ip — clears the "profile" of an IP so you can keep
+ * testing without a full simulation reset. Wipes:
+ *   - rate-limit windows (in-memory + KV) for that IP
+ *   - the per-IP account creation counter (ip_accs:{ip})
+ *   - if a sessionId is given: resets its anomaly score to 0 and unbans it
+ *
+ * Body: { secret, ip?, sessionId? }   (ip defaults to the caller's IP)
+ */
+export async function handleResetIp(request, env, config) {
+  const body = await request.json().catch(() => ({}));
+  const providedSecret = body.secret || request.headers.get("X-Reset-Secret") || "";
+  const expectedSecret = env.RESET_SECRET || DEFAULTS.reset_secret;
+  if (!safeEqual(providedSecret, expectedSecret)) {
+    return jsonResponse({ error: "invalid_secret" }, 403);
+  }
+
+  const ip = body.ip || getIP(request);
+  const cleared = [];
+
+  // 1. Per-IP account creation counter
+  await env.KV.delete(`ip_accs:${ip}`);
+  cleared.push(`ip_accs:${ip}`);
+
+  // 2. Rate-limit window for this IP (KV side)
+  await env.KV.delete(`rl:ip:${ip}`);
+  cleared.push(`rl:ip:${ip}`);
+
+  // 3. In-memory rate-limit windows (clears all — they rebuild instantly)
+  _resetRateLimiterMemory();
+  cleared.push("in-memory rate windows");
+
+  // 4. Optionally reset a session's anomaly score + ban
+  let sessionReset = null;
+  if (body.sessionId) {
+    const session = await env.KV.get(`sess:${body.sessionId}`, "json");
+    if (session) {
+      const updated = { ...session, anomalyScore: 0, banned: false };
+      await env.KV.put(`sess:${body.sessionId}`, JSON.stringify(updated), {
+        expirationTtl: config.session_ttl_seconds,
+      });
+      // Also clear that session's rate-limit + behavioral history
+      await env.KV.delete(`rl:acc:${body.sessionId}`);
+      await env.KV.delete(`beh:${body.sessionId}`);
+      sessionReset = { sessionId: body.sessionId, anomalyScore: 0, banned: false };
+      cleared.push(`session ${body.sessionId.slice(0, 10)}… (score reset, unbanned)`);
+    }
+  }
+
+  return jsonResponse({ ok: true, ip, cleared, sessionReset });
 }
 
 export async function handleLogs(request, env, config) {

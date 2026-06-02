@@ -66,6 +66,29 @@
           <button id="btn-reset" class="btn btn-primary" style="width:100%">🔄 Reset Simulation</button>
         </div>
 
+        <!-- Reset IP profile -->
+        <div class="card">
+          <h2>Reset IP Profile</h2>
+          <p class="dim" style="font-size:12px;margin-bottom:1rem">
+            Clears rate-limit windows + per-IP account cap. Optionally unbans a
+            session and resets its anomaly score. Lets you keep testing without
+            a full simulation reset.
+          </p>
+          <div class="form-group">
+            <label>IP <span class="dim">(blank = your current IP)</span></label>
+            <input type="text" id="inp-reset-ip" placeholder="auto-detect">
+          </div>
+          <div class="form-group">
+            <label>Session ID <span class="dim">(optional — unban + reset score)</span></label>
+            <input type="text" id="inp-reset-session" placeholder="paste your sessionId">
+          </div>
+          <div id="resetip-result" class="alert" style="display:none;margin-bottom:1rem"></div>
+          <button id="btn-reset-ip" class="btn btn-secondary" style="width:100%">🧹 Reset IP Profile</button>
+          <button id="btn-use-my-session" class="btn btn-secondary" style="width:100%;margin-top:.5rem;font-size:11px">
+            Use my current session
+          </button>
+        </div>
+
         <!-- Current config -->
         <div class="card">
           <h2>Current Config</h2>
@@ -143,6 +166,43 @@
       btn.textContent = "🔄 Reset Simulation";
       await refreshStatus();
       await refreshLogs();
+    });
+
+    // Prefill the session field with the browser's current session
+    document.getElementById("btn-use-my-session").addEventListener("click", () => {
+      const s = localStorage.getItem("ts_session");
+      if (s) document.getElementById("inp-reset-session").value = s;
+      else alert("No session in this browser — log in on the event page first.");
+    });
+
+    document.getElementById("btn-reset-ip").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-reset-ip");
+      btn.disabled = true;
+      btn.textContent = "Clearing…";
+
+      const ip        = document.getElementById("inp-reset-ip").value.trim();
+      const sessionId = document.getElementById("inp-reset-session").value.trim();
+
+      const res = await fetch(`${API_URL}/api/admin/reset-ip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          secret,
+          ...(ip ? { ip } : {}),
+          ...(sessionId ? { sessionId } : {}),
+        }),
+      });
+      const data = await res.json();
+      const el = document.getElementById("resetip-result");
+      el.style.display = "block";
+      el.className = data.ok ? "alert alert-success" : "alert alert-error";
+      el.textContent = data.ok
+        ? `✓ Cleared for ${data.ip}: ${data.cleared.join(", ")}`
+        : `✗ ${data.error}`;
+
+      btn.disabled = false;
+      btn.textContent = "🧹 Reset IP Profile";
+      await refreshStatus();
     });
 
     async function refreshStatus() {

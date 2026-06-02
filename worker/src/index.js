@@ -19,6 +19,7 @@ import {
   handleGetHoneypot,
   handleGetSession,
   handleAdmin,
+  handleResetIp,
 } from "./handlers/api.js";
 import { handleScoreboard } from "./handlers/scoreboard.js";
 import { logRequest } from "./utils/logger.js";
@@ -46,8 +47,12 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname;
 
-      // IP reputation check — exempt /api/reset so operator can always recover
-      if (path !== "/api/reset" && isDatacenterIP(ip)) {
+      // Admin recovery endpoints are exempt from IP reputation + rate limiting
+      // so the operator can always recover, even from a banned/limited IP.
+      const isAdminRecovery = path === "/api/reset" || path === "/api/admin/reset-ip";
+
+      // IP reputation check
+      if (!isAdminRecovery && isDatacenterIP(ip)) {
         ctx.waitUntil(logRequest(env, { type: "blocked_datacenter_ip", ip, path }));
         if (sessionId) {
           ctx.waitUntil(applyScoreDeltas(env, config, sessionId, [SCORE_DELTAS.datacenter_ip]));
@@ -59,7 +64,7 @@ export default {
       // GET requests (browsing the event page, polling status) are reads and
       // must not be throttled, otherwise normal navigation gets 429'd. The
       // meaningful bot-abuse surface is the checkout/auth POSTs anyway.
-      if (request.method === "POST") {
+      if (request.method === "POST" && !isAdminRecovery) {
         const rateResult = await checkRateLimit(env, config, ip, sessionId);
         if (rateResult.blocked) {
           ctx.waitUntil(logRequest(env, { type: "rate_limited", ip, reason: rateResult.reason, path }));
@@ -97,6 +102,9 @@ export default {
 
       if (path === "/api/reset" && request.method === "POST")
         return handleReset(request, env);
+
+      if (path === "/api/admin/reset-ip" && request.method === "POST")
+        return handleResetIp(request, env, config);
 
       if (path === "/api/logs" && request.method === "GET")
         return handleLogs(request, env, config);
