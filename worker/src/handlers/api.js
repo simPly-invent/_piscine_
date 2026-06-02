@@ -14,6 +14,21 @@ import { issueCaptcha } from "../security/captcha.js";
 import { issueHoneypotConfig } from "../security/honeypot.js";
 import { _resetRateLimiterMemory } from "../security/rate-limiter.js";
 
+/**
+ * Delete every KV key matching any of the given prefixes. Paginates through
+ * KV.list() (1000 keys/page) until exhausted. Used by reset for a clean slate.
+ */
+async function clearByPrefixes(env, prefixes) {
+  for (const prefix of prefixes) {
+    let cursor;
+    do {
+      const list = await env.KV.list({ prefix, cursor });
+      await Promise.all(list.keys.map(k => env.KV.delete(k.name)));
+      cursor = list.list_complete ? undefined : list.cursor;
+    } while (cursor);
+  }
+}
+
 export async function handleStatus(request, env, config) {
   let count = 0, total = 0, purchases = {};
   try {
@@ -99,6 +114,13 @@ export async function handleReset(request, env) {
   await clearLogs(env);
   await env.KV.delete("taken_seats");
   await env.KV.delete("bot_schedule");
+
+  // Wipe ALL per-player state so a reset is a true clean slate: sessions (and
+  // their anomaly scores / bans), rate-limit windows, behavioral history,
+  // fingerprints, honeypot configs, and per-IP account counters. Without this,
+  // a session that got banned in a previous run stays banned after reset.
+  await clearByPrefixes(env, ["sess:", "rl:", "beh:", "fp:", "hp:", "ip_accs:", "captcha:", "ct:", "queue:", "acc:", "email:"]);
+  _resetRateLimiterMemory();
 
   const startedAt = Date.now();
   await env.KV.put("simulation", JSON.stringify({ startedAt }), {

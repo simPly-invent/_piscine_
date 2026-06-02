@@ -1,1 +1,1 @@
-{"version":"1.6.1","results":[[":tests/ticket-counter.test.js",{"duration":32,"failed":false}],[":tests/rate-limiter.test.js",{"duration":6,"failed":false}],[":tests/token-expiry.test.js",{"duration":8,"failed":false}]]}
+{"version":"1.6.1","results":[[":tests/ticket-counter.test.js",{"duration":31,"failed":false}],[":tests/rate-limiter.test.js",{"duration":5,"failed":false}],[":tests/token-expiry.test.js",{"duration":9,"failed":false}]]}
