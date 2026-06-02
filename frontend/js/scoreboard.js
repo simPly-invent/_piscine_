@@ -51,19 +51,31 @@ function update(data) {
   // Difficulty
   set("val-difficulty", data.difficulty || "—");
 
+  // Ban threshold for this difficulty — drives the win-condition text + colours
+  const threshold = data.ban_threshold ?? 50;
+  const winText = document.getElementById("win-condition");
+  if (winText) {
+    winText.innerHTML =
+      `Win: buy a ticket · keep anomaly <strong>&lt; ${threshold}</strong> · not banned`;
+  }
+
   // Anomaly score
   if (data.your_anomaly_score !== null && data.your_anomaly_score !== undefined) {
     const score = data.your_anomaly_score;
     set("val-anomaly", score);
+    set("val-threshold", threshold);
     const fill = document.getElementById("anomaly-fill");
     if (fill) {
-      fill.style.width = score + "%";
-      fill.style.background = score < 40 ? "#2ecc71" : score < 65 ? "#f39c12" : "#e74c3c";
+      fill.style.width = Math.min(100, score) + "%";
+      // Colour relative to THIS difficulty's ban threshold
+      fill.style.background =
+        score >= threshold ? "#e74c3c" :
+        score >= threshold * 0.6 ? "#f39c12" : "#2ecc71";
     }
     const bannedEl = document.getElementById("banned-status");
     if (bannedEl) {
-      bannedEl.textContent    = data.your_banned ? "⛔ BANNED" : "✓ Active";
-      bannedEl.style.color    = data.your_banned ? "#e74c3c" : "#2ecc71";
+      bannedEl.textContent = data.your_banned ? "⛔ BANNED" : "✓ Active";
+      bannedEl.style.color = data.your_banned ? "#e74c3c" : "#2ecc71";
     }
   }
 
@@ -117,6 +129,7 @@ if (typeof EventSource === "undefined") {
         bot_purchases:      d1.tickets?.taken_by_bots,
         elapsed_ms:         d1.simulation?.elapsed_ms,
         difficulty:         d1.config?.difficulty,
+        ban_threshold:      d1.config?.anomaly_ban_threshold,
         your_anomaly_score: d2.anomalyScore ?? null,
         your_banned:        d2.banned ?? null,
         bot_feed:           d1.bot_activity,

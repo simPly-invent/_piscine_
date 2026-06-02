@@ -48,7 +48,9 @@
         <h2>Your Session</h2>
         <div style="margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between">
           <span class="dim">Anomaly Score</span>
-          <span><strong id="val-anomaly">—</strong> / 100</span>
+          <span><strong id="val-anomaly">—</strong> / 100
+            <span class="dim" style="font-size:11px">(ban at <strong id="val-threshold">—</strong>)</span>
+          </span>
         </div>
         <div class="anomaly-bar">
           <div id="anomaly-fill" class="anomaly-fill" style="width:0%"></div>
@@ -61,8 +63,8 @@
           <span class="dim">Status:</span>
           <span id="banned-status">Unknown</span>
         </div>
-        <div style="margin-top:.5rem;font-size:11px;padding:.5rem;background:#111;border-radius:4px;color:var(--text-dim)">
-          Win: buy tickets · anomaly &lt; 50 · not banned
+        <div id="win-condition" style="margin-top:.5rem;font-size:11px;padding:.5rem;background:#111;border-radius:4px;color:var(--text-dim)">
+          Win: buy a ticket · keep anomaly low · not banned
         </div>
 
         <!-- Difficulty badge -->
@@ -107,6 +109,6 @@
     </div>
   </main>
 
-  <script type="module" src="js/scoreboard.js?v=4"></script>
+  <script type="module" src="js/scoreboard.js?v=5"></script>
 </body>
 </html>

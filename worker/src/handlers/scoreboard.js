@@ -44,9 +44,10 @@ export async function handleScoreboard(request, env) {
           tickets_remaining:  Math.max(0, count - botState.totalBotTickets),
           tickets_total:      total,
           bot_purchases:      botState.totalBotTickets,
-          human_purchases:    Math.max(0, total - count - botState.totalBotTickets),
+          human_purchases:    Math.max(0, total - count),
           elapsed_ms:         elapsed,
           difficulty:         config.difficulty,
+          ban_threshold:      config.anomaly_ban_threshold,
           your_anomaly_score: session?.anomalyScore ?? null,
           your_banned:        session?.banned       ?? null,
           bot_feed: Object.entries(botState.botAccounts)

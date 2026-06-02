@@ -29,7 +29,10 @@ export async function handleStatus(request, env, config) {
   const nowMs = Date.now();
   const botState = await getBotState(env, total, config, nowMs);
 
-  const humanPurchases = Math.max(0, total - count - botState.totalBotTickets);
+  // The Durable Object counter only tracks REAL (human) purchases — bots are
+  // simulated and never touch it. So human purchases = total − DO count.
+  // Bot purchases are tracked separately. Effective remaining = count − bots.
+  const humanPurchases = Math.max(0, total - count);
   const elapsed = sim.startedAt ? nowMs - sim.startedAt : 0;
   const timeLeft = sim.startedAt
     ? Math.max(0, config.session_ttl_seconds * 1000 - elapsed)
