@@ -13,6 +13,7 @@ import { issueCaptcha, validateCaptcha } from "../security/captcha.js";
 import { checkHoneypot } from "../security/honeypot.js";
 import { analyzeSession, recordAction } from "../security/behavioral.js";
 import { checkFingerprint } from "../security/fingerprint.js";
+import { checkHttpFingerprint } from "../security/http-fingerprint.js";
 import { validateSessionBinding, getSession } from "../security/session-binding.js";
 import { applyScoreDeltas, SCORE_DELTAS } from "../security/anomaly-score.js";
 import { logRequest } from "../utils/logger.js";
@@ -100,6 +101,11 @@ export async function handleCheckoutInit(request, env, config) {
   if (fpResult.score > 0)
     deltas.push({ delta: fpResult.score, reason: `fingerprint (${fpResult.reasons.join(",")})` });
 
+  // TLS/HTTP client fingerprint — catches HTTP libraries spoofing a browser UA
+  const httpFp = checkHttpFingerprint(request, config);
+  if (httpFp.score > 0)
+    deltas.push({ delta: httpFp.score, reason: `http_fingerprint (${httpFp.reasons.join(",")})` });
+
   await recordAction(env, sessionId, "checkout_init", Date.now());
   const behResult = await analyzeSession(env, sessionId, config);
   if (behResult.suspicious)
@@ -138,6 +144,11 @@ export async function handleCheckoutComplete(request, env, config) {
   const deltas = [];
   if (binding.anomalyDelta > 0)
     deltas.push({ delta: binding.anomalyDelta, reason: `session_binding (${binding.reasons.join(",")})` });
+
+  // TLS/HTTP client fingerprint
+  const httpFp = checkHttpFingerprint(request, config);
+  if (httpFp.score > 0)
+    deltas.push({ delta: httpFp.score, reason: `http_fingerprint (${httpFp.reasons.join(",")})` });
 
   // Honeypot check
   const honeypotTriggered = await checkHoneypot(env, sessionId, body);
