@@ -13,6 +13,7 @@
  */
 
 import { issueCheckoutToken, consumeCheckoutToken } from "../security/token-rotation.js";
+import { getBotState } from "../bots/defender.js";
 import { issueCaptcha, validateCaptcha } from "../security/captcha.js";
 import { checkHoneypot } from "../security/honeypot.js";
 import { analyzeSession, recordAction } from "../security/behavioral.js";
@@ -40,7 +41,9 @@ export async function handleGetEvent(request, env, config) {
   });
   const { count, total } = await res.json();
 
-  // Build a 10×10 seat grid.  Taken seats are stored as a set in KV.
+  const sim = (await env.KV.get("simulation", "json")) || {};
+  const { totalBotTickets } = await getBotState(env, total, config, Date.now());
+
   const takenSeats = (await env.KV.get("taken_seats", "json")) || [];
   const seats = buildSeatMap(total, takenSeats);
 
@@ -50,7 +53,7 @@ export async function handleGetEvent(request, env, config) {
       venue: "The Concurrent Arena",
       date: "2025-12-31T21:00:00Z",
     },
-    tickets_remaining: count,
+    tickets_remaining: Math.max(0, count - totalBotTickets),
     tickets_total: total,
     seats,
   });

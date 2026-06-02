@@ -36,8 +36,8 @@ export async function handleStatus(request, env, config) {
     },
     tickets: {
       total,
-      remaining: count,
-      taken: total - count,
+      remaining: Math.max(0, count - botState.totalBotTickets),
+      taken: total - count + botState.totalBotTickets,
       human_purchases: Math.max(0, humanPurchases),
       bot_purchases: botState.totalBotTickets,
     },
