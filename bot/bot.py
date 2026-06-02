@@ -13,9 +13,17 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 
 # ── Config ────────────────────────────────────────────────────────────────────
-API       = "https://ticketstorm.dbenaissi.workers.dev"
+API       = "http://localhost:8787"   # local wrangler dev (or the live worker URL)
 ACCOUNTS  = 5      # comptes lancés en parallèle
 MAX_SEATS = 2      # max par compte (limite serveur)
+
+# Human-like delay between pipeline steps (ms). The behavioral defense flags
+# any step faster than `behavioral_min_action_ms` (500ms in nightmare) and also
+# flags *too-regular* timing (low variance). So we use a base delay + gaussian
+# jitter to look human. Set to 0 to go full-speed (and accept the behavioral
+# flag) when you only care about winning the ticket race, not the anomaly score.
+STEP_DELAY_MS = 650          # base delay; must exceed the difficulty's min
+STEP_JITTER   = 0.35         # ±35% gaussian jitter → variance looks biological
 
 # Proxies résidentiels (laisser vide = pas de proxy)
 # Format: "http://user:pass@ip:port"
@@ -31,17 +39,50 @@ def random_email():
     domain = random.choice(["gmail.com", "yahoo.com", "hotmail.com"])
     return f"{slug}@{domain}"
 
+async def human_delay():
+    """Sleep a human-like, jittered amount to beat the behavioral timing check."""
+    if STEP_DELAY_MS <= 0:
+        return
+    base = STEP_DELAY_MS / 1000
+    # gaussian jitter around the base, clamped so it never dips below the base
+    ms = max(base, random.gauss(base, base * STEP_JITTER))
+    await asyncio.sleep(ms)
+
+# A COHERENT Chrome 120 header set. The HTTP-fingerprint defense flags any
+# inconsistency, so every field here is internally consistent:
+#   - User-Agent says Chrome/120  →  sec-ch-ua MUST also say version 120
+#   - Client Hints (sec-ch-ua*) present, as a real Chromium always sends them
+#   - Fetch Metadata (sec-fetch-*) present
+#   - Accept is type-specific, NOT the bare "*/*" that requests/curl default to
+#   - accept-language present
+#
+# NOTE: this defeats the *HTTP* fingerprint only. A real platform also checks
+# the *TLS* fingerprint (JA3) — aiohttp's TLS ClientHello is still "Python".
+# To beat that you'd swap aiohttp for a browser-impersonating TLS client
+# (e.g. `tls-client`, `curl_cffi`/curl-impersonate). See README.
+_CHROME_VERSION = "120"
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    f"(KHTML, like Gecko) Chrome/{_CHROME_VERSION}.0.0.0 Safari/537.36"
+)
+
 def headers(session_id=None):
     h = {
         "Content-Type": "application/json",
-        # Headers qui imitent un vrai Chrome — évite le fingerprint check
+        "User-Agent": _USER_AGENT,
+        # Client Hints — version must match the UA above
+        "sec-ch-ua": f'"Not_A Brand";v="8", "Chromium";v="{_CHROME_VERSION}", '
+                     f'"Google Chrome";v="{_CHROME_VERSION}"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        # Fetch Metadata
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        # Type-specific Accept (a browser never sends a bare */* here)
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
-        "Sec-Fetch-Site": "cross-site",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     }
     if session_id:
         h["Authorization"] = f"Bearer {session_id}"
@@ -171,6 +212,8 @@ async def run_account(session: aiohttp.ClientSession,
         sid = acc["sessionId"]
         log(f"registered → {sid[:12]}…")
 
+        await human_delay()  # look human: pause before browsing
+
         # 2. Get event + honeypot fields en parallèle
         event_task    = asyncio.create_task(get_event(session, sid, proxy))
         honeypot_task = asyncio.create_task(get_honeypot_fields(session, sid, proxy))
@@ -183,12 +226,15 @@ async def run_account(session: aiohttp.ClientSession,
             return {"account": account_num, "ok": False, "reason": "no_seats"}
         log(f"seats selected: {seats}")
 
+        await human_delay()  # pause before opening checkout
+
         # 3. checkout/init
         co = await checkout_init(session, sid, seats, proxy)
         token   = co["checkoutToken"]
         captcha = co.get("captcha")
 
-        # 4. Résoudre PoW dans un thread (non-bloquant)
+        # 4. Résoudre PoW dans un thread (non-bloquant). The PoW itself takes
+        #    time, which conveniently doubles as a human-like gap before submit.
         if captcha:
             log(f"solving PoW (zeros={captcha['zeros']})…")
             solution = await solve_pow(captcha["challenge"], captcha["zeros"])
@@ -196,6 +242,7 @@ async def run_account(session: aiohttp.ClientSession,
         else:
             solution  = None
             captcha   = {"challenge": None}
+            await human_delay()  # no PoW to absorb time → add a manual pause
 
         # 5. checkout/complete
         result = await checkout_complete(
