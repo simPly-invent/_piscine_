@@ -18,6 +18,11 @@
 // In-memory sliding window — reset when the Worker instance is recycled
 const memoryWindows = new Map();
 
+/** Test helper: clears in-memory window state between test cases. */
+export function _resetRateLimiterMemory() {
+  memoryWindows.clear();
+}
+
 export async function checkRateLimit(env, config, ip, accountId) {
   const limit = config.rate_limit_requests_per_second;
   const now = Date.now();

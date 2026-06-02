@@ -10,7 +10,11 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { checkRateLimit } from "../worker/src/security/rate-limiter.js";
+import { checkRateLimit, _resetRateLimiterMemory } from "../worker/src/security/rate-limiter.js";
+
+// The rate limiter keeps an in-memory window that persists across calls within
+// the same Worker instance. Clear it before each test so cases stay isolated.
+beforeEach(() => _resetRateLimiterMemory());
 
 // KV mock with real timestamps
 function makeKV() {
