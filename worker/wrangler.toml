@@ -1,0 +1,32 @@
+name = "ticketstorm"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Durable Objects provide the ONLY safe way to do atomic ticket decrements.
+# Without DO, two concurrent requests can both read count=5, both write count=4
+# and you lose a ticket. The TicketCounter DO serializes all writes.
+[[durable_objects.bindings]]
+name = "TICKET_COUNTER"
+class_name = "TicketCounter"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["TicketCounter"]
+
+# KV namespace for sessions, accounts, rate-limit windows, logs.
+# Create with: wrangler kv:namespace create TICKETSTORM_KV
+[[kv_namespaces]]
+binding = "KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[vars]
+ENVIRONMENT = "production"
+
+# Set via: wrangler secret put RESET_SECRET
+# [secrets]
+# RESET_SECRET
+
+[site]
+# Uncomment if you want to serve the frontend from the worker itself (optional).
+# bucket = "../frontend"

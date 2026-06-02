@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TicketStorm — Checkout</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <span class="logo">⚡ TicketStorm</span>
+      <nav>
+        <a href="index.html">← Back to Event</a>
+        <a href="scoreboard.html">Scoreboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container" style="max-width:600px">
+    <div id="alert" class="alert" style="display:none"></div>
+
+    <div class="card">
+      <h2>Checkout</h2>
+      <p id="checkout-status" class="dim" style="margin-bottom:1rem">Initialising…</p>
+
+      <div style="margin-bottom:1rem;font-size:13px">
+        <span class="dim">Seats: </span>
+        <strong id="seats-summary"></strong>
+      </div>
+
+      <div style="margin-bottom:1rem;font-size:12px;color:var(--text-dim)">
+        Token expires in: <strong id="token-ttl">—</strong>
+        &nbsp;·&nbsp;
+        <span id="captcha-status">CAPTCHA: pending</span>
+      </div>
+
+      <!-- Checkout form — hidden until checkout is initialised -->
+      <form id="checkout-form" style="display:none">
+        <!-- Honeypot fields are injected here by checkout.js -->
+
+        <h2 style="margin-bottom:1rem">Payment Details <span class="dim">(fake)</span></h2>
+
+        <div class="form-group">
+          <label>Cardholder Name</label>
+          <input type="text" id="card-name" name="card_name" placeholder="Jane Doe" autocomplete="cc-name" required>
+        </div>
+        <div class="form-group">
+          <label>Card Number</label>
+          <input type="text" id="card-number" name="card_number" placeholder="4111 1111 1111 1111"
+                 maxlength="19" autocomplete="cc-number" required>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="form-group">
+            <label>Expiry</label>
+            <input type="text" id="card-expiry" name="card_expiry" placeholder="MM/YY" maxlength="5" autocomplete="cc-exp" required>
+          </div>
+          <div class="form-group">
+            <label>CVV</label>
+            <input type="text" id="card-cvv" name="card_cvv" placeholder="123" maxlength="3" autocomplete="cc-csc" required>
+          </div>
+        </div>
+
+        <button id="btn-buy" type="submit" class="btn btn-primary" disabled style="width:100%;margin-top:.5rem">
+          Complete Purchase
+        </button>
+      </form>
+    </div>
+
+    <div class="card" style="font-size:12px;color:var(--text-dim)">
+      <h2>What just happened (study this)</h2>
+      <ol style="padding-left:1.2rem;line-height:1.9">
+        <li>Your session was bound to your IP + User-Agent on login.</li>
+        <li>A single-use checkout token was issued with a 30s TTL.</li>
+        <li>A proof-of-work CAPTCHA challenge was sent — your browser solved it above.</li>
+        <li>Hidden honeypot fields were injected into this form.</li>
+        <li>Your behavioral timing is being analysed as you interact.</li>
+        <li>When you submit, an atomic Durable Object decrements the ticket counter.</li>
+      </ol>
+      <p style="margin-top:.75rem">
+        To replicate this in a bot: automate all 6 steps while staying below
+        the anomaly score threshold. Check your score on the
+        <a href="scoreboard.html">scoreboard</a>.
+      </p>
+    </div>
+  </main>
+
+  <script type="module" src="js/checkout.js"></script>
+</body>
+</html>

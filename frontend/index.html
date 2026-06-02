@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TicketStorm — Event</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <span class="logo">⚡ TicketStorm</span>
+      <nav>
+        <a href="index.html">Event</a>
+        <a href="scoreboard.html">Scoreboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="alert" class="alert" style="display:none"></div>
+
+    <!-- Queue overlay -->
+    <div id="queue-overlay">
+      <h2>You're in the queue</h2>
+      <div id="queue-countdown">…</div>
+      <p>Hang tight. You'll be admitted shortly.</p>
+      <p class="dim" style="margin-top:1rem;font-size:11px">
+        Your queue position is randomised per session. This is a security layer — study it.
+      </p>
+    </div>
+
+    <!-- Event banner -->
+    <div class="event-banner">
+      <h1 id="event-name">TicketStorm Live — Sold Out Tour</h1>
+      <div class="meta" id="event-venue">The Concurrent Arena · 31 Dec 2025</div>
+      <div style="margin-top:1.5rem;display:flex;align-items:baseline;gap:.75rem">
+        <span id="tickets-left" class="ticket-count">—</span>
+        <span class="dim">tickets remaining</span>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <!-- Left: seat map -->
+      <div>
+        <div class="card">
+          <h2>Seat Map</h2>
+          <div id="seat-map"></div>
+          <div class="seat-legend">
+            <span><span class="dot" style="background:#1e3a2e;border:1px solid #2ecc7144"></span> Available</span>
+            <span><span class="dot" style="background:#1a2e4a;border:1px solid #3498db"></span> Selected</span>
+            <span><span class="dot" style="background:#2a1a1a;border:1px solid #e74c3c44"></span> Taken</span>
+          </div>
+          <div style="margin-top:1rem;display:flex;align-items:center;gap:1rem">
+            <span class="dim">Selected: <strong id="selected-count">0</strong></span>
+            <button id="btn-checkout" class="btn btn-primary" disabled>
+              Checkout →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: login / register -->
+      <div>
+        <div class="card" id="auth-card">
+          <h2>Account</h2>
+          <div class="form-group">
+            <label>Username (register only)</label>
+            <input type="text" id="inp-username" placeholder="your_handle">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="inp-email" placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="inp-password" placeholder="••••••••">
+          </div>
+          <div style="display:flex;gap:.75rem">
+            <button id="btn-login" class="btn btn-primary">Log in</button>
+            <button id="btn-register" class="btn btn-secondary">Register</button>
+          </div>
+        </div>
+
+        <div class="card" style="font-size:12px;color:var(--text-dim)">
+          <h2>Defend yourself</h2>
+          <p>This simulation has active bot defenses:</p>
+          <ul style="margin-top:.75rem;padding-left:1.2rem;line-height:1.8">
+            <li>Rate limiting (sliding window)</li>
+            <li>Proof-of-work CAPTCHA on checkout</li>
+            <li>Honeypot form fields</li>
+            <li>Behavioral timing analysis</li>
+            <li>Canvas device fingerprinting</li>
+            <li>Single-use, 30s checkout tokens</li>
+            <li>Datacenter IP blocklist</li>
+            <li>Virtual waiting room</li>
+            <li>Session IP+UA binding</li>
+            <li>Anomaly scoring (0–100)</li>
+          </ul>
+          <p style="margin-top:.75rem">
+            Visit the <a href="scoreboard.html">scoreboard</a> to track your anomaly score.
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

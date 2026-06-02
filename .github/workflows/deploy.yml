@@ -1,0 +1,98 @@
+name: Deploy TicketStorm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reset_after_deploy:
+        description: "Reset the simulation after deploy?"
+        type: boolean
+        default: true
+
+jobs:
+  # ── 1. Run tests ─────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: worker/package.json
+      - run: npm ci
+        working-directory: worker
+      - run: npm test -- --reporter=verbose
+        working-directory: worker
+
+  # ── 2. Deploy Cloudflare Worker ───────────────────────────────────────────────
+  deploy-worker:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      worker_url: ${{ steps.get-url.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: worker/package.json
+      - run: npm ci
+        working-directory: worker
+
+      - name: Deploy to Cloudflare Workers
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      # Workers URLs follow a deterministic pattern: {name}.{subdomain}.workers.dev
+      # We derive it from the wrangler.toml name + the account subdomain stored in secrets.
+      - name: Get Worker URL
+        id: get-url
+        run: |
+          WORKER_NAME=$(grep '^name' worker/wrangler.toml | head -1 | sed 's/name = "\(.*\)"/\1/')
+          echo "url=https://${WORKER_NAME}.${{ secrets.CF_WORKERS_SUBDOMAIN }}.workers.dev" >> "$GITHUB_OUTPUT"
+
+  # ── 3. Build + deploy GitHub Pages ──────────────────────────────────────────
+  deploy-frontend:
+    needs: deploy-worker
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Inject the live Worker URL into the frontend config
+      - name: Inject Worker URL
+        run: |
+          WORKER_URL="${{ needs.deploy-worker.outputs.worker_url }}"
+          sed -i "s|__WORKER_URL__|${WORKER_URL}|g" frontend/js/config.js
+          echo "Configured API URL: ${WORKER_URL}"
+
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # ── 4. Reset the simulation ──────────────────────────────────────────────────
+  reset-simulation:
+    needs: [deploy-worker, deploy-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || inputs.reset_after_deploy == true
+    steps:
+      - name: Reset simulation via API
+        run: |
+          WORKER_URL="${{ needs.deploy-worker.outputs.worker_url }}"
+          curl -s -X POST "${WORKER_URL}/api/reset" \
+            -H "Content-Type: application/json" \
+            -d "{\"secret\": \"${{ secrets.RESET_SECRET }}\"}" | jq .

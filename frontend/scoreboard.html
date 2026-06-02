@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TicketStorm — Scoreboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <span class="logo">⚡ TicketStorm</span>
+      <nav>
+        <a href="index.html">Event</a>
+        <span id="conn-status" style="color:var(--text-dim);font-size:12px;margin-left:1.5rem">Connecting…</span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Ticket stats -->
+    <div class="score-grid">
+      <div class="score-cell">
+        <div class="val" id="val-remaining">—</div>
+        <div class="lbl">Tickets Remaining</div>
+      </div>
+      <div class="score-cell">
+        <div class="val" id="val-human-purchases">—</div>
+        <div class="lbl">Human Purchases</div>
+      </div>
+      <div class="score-cell">
+        <div class="val" id="val-bot-purchases">—</div>
+        <div class="lbl">Bot Purchases</div>
+      </div>
+      <div class="score-cell">
+        <div class="val" id="val-total">—</div>
+        <div class="lbl">Total Tickets</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <!-- Your session stats -->
+      <div class="card">
+        <h2>Your Session</h2>
+        <div style="margin-bottom:1rem">
+          <span class="dim">Anomaly Score: </span>
+          <strong id="val-anomaly">—</strong> / 100
+        </div>
+        <div class="anomaly-bar">
+          <div id="anomaly-fill" class="anomaly-fill" style="width:0%"></div>
+        </div>
+        <div style="margin-top:1rem;font-size:13px">
+          <span class="dim">Status: </span>
+          <span id="banned-status">Unknown</span>
+        </div>
+        <div style="margin-top:1.5rem;font-size:12px;color:var(--text-dim)">
+          <strong>Win condition:</strong> Secure tickets while keeping your anomaly
+          score below 50 and avoiding an IP ban.
+        </div>
+      </div>
+
+      <!-- Bot activity feed -->
+      <div class="card">
+        <h2>Bot Activity Feed</h2>
+        <ul id="bot-feed">
+          <li><span class="ts">—</span>Waiting for activity…</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- API reference -->
+    <div class="card" style="font-size:12px">
+      <h2>API Reference (for bot authors)</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="color:var(--text-dim);text-align:left">
+            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Endpoint</th>
+            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Method</th>
+            <th style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:.4rem .5rem">/api/auth/register</td><td>POST</td><td>Create account → {accountId, sessionId}</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/auth/login</td><td>POST</td><td>Login → {sessionId}</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/event</td><td>GET</td><td>Event info + seat map</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/captcha</td><td>GET</td><td>Get PoW challenge</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/honeypot</td><td>GET</td><td>Get honeypot field names to skip</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/checkout/init</td><td>POST</td><td>Get checkout token + CAPTCHA</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/checkout/complete</td><td>POST</td><td>Buy tickets (atomic)</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/queue/status</td><td>GET</td><td>Check queue admission</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/session</td><td>GET</td><td>Your current anomaly score</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/status</td><td>GET</td><td>Full simulation state (JSON)</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/logs</td><td>GET</td><td>Request logs for analysis</td></tr>
+          <tr><td style="padding:.4rem .5rem">/api/reset</td><td>POST</td><td>Reset simulation (needs secret)</td></tr>
+          <tr><td style="padding:.4rem .5rem">/events/scoreboard</td><td>GET</td><td>SSE stream (this page)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module" src="js/scoreboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TicketStorm — Confirmed</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <span class="logo">⚡ TicketStorm</span>
+      <nav><a href="index.html">← Back to Event</a></nav>
+    </div>
+  </header>
+  <main class="container" style="max-width:600px">
+    <div class="card" style="text-align:center;padding:3rem">
+      <div style="font-size:3rem;margin-bottom:1rem">🎫</div>
+      <h1 style="font-size:1.5rem;margin-bottom:.5rem">Tickets Secured!</h1>
+      <p class="dim" style="margin-bottom:2rem">Your purchase is confirmed.</p>
+      <div class="conf-code" id="conf-code">—</div>
+      <div style="margin-top:1.5rem;font-size:13px">
+        <span class="dim">Seats: </span><strong id="conf-seats">—</strong>
+      </div>
+      <div style="margin-top:.5rem;font-size:13px">
+        <span class="dim">Tickets remaining in pool: </span><strong id="conf-remaining">—</strong>
+      </div>
+      <div style="margin-top:.5rem;font-size:13px">
+        <span class="dim">Your anomaly score: </span><strong id="conf-score">—</strong>
+      </div>
+      <div style="margin-top:2rem">
+        <a href="scoreboard.html" class="btn btn-secondary">View Scoreboard</a>
+      </div>
+    </div>
+  </main>
+  <script>
+    const data = JSON.parse(sessionStorage.getItem("ts_confirmation") || "{}");
+    document.getElementById("conf-code").textContent = data.confirmation || "—";
+    document.getElementById("conf-seats").textContent = (data.seats || []).join(", ") || "—";
+    document.getElementById("conf-remaining").textContent = data.tickets_remaining ?? "—";
+    document.getElementById("conf-score").textContent = data.anomalyScore ?? "—";
+  </script>
+</body>
+</html>
