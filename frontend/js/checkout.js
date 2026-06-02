@@ -88,27 +88,83 @@ async function initCheckout() {
 }
 
 // ── Proof-of-Work solver ─────────────────────────────────────────────────────
-// Runs in a tight loop.  In a real bot you'd offload this to a worker thread.
-// Here we use a chunked approach to keep the page responsive.
+// Uses a SYNCHRONOUS SHA-256 (sha256sync below) so we can hash millions of
+// nonces per second. We process a big batch synchronously, then yield with
+// setTimeout(0) so the UI stays responsive and the TTL countdown keeps ticking.
+//
+// Why not `await crypto.subtle.digest` per nonce? Each await yields to the
+// event loop — at ~1M nonces for 5 leading zeros that takes >30s and the
+// checkout token expires first. The sync hash does the same work in ~1-2s.
+//
+// In a real bot you'd run this in a worker thread (or WASM/Rust) — even faster.
 async function solvePoW(challenge, zeros) {
   const target = "0".repeat(zeros);
+  const BATCH = 20000; // hashes per synchronous chunk (~20-40ms)
   let nonce = 0;
 
-  while (true) {
-    // Process 500 nonces per animation frame to avoid blocking the UI
-    for (let i = 0; i < 500; i++) {
-      const candidate = nonce.toString();
-      const hash = await sha256(challenge + candidate);
-      if (hash.startsWith(target)) return candidate;
-      nonce++;
-    }
-    await new Promise((r) => requestAnimationFrame(r));
-  }
+  return new Promise((resolve) => {
+    const step = () => {
+      const end = nonce + BATCH;
+      for (; nonce < end; nonce++) {
+        if (sha256sync(challenge + nonce).startsWith(target)) {
+          resolve(String(nonce));
+          return;
+        }
+      }
+      // Update the on-screen attempt counter, then yield
+      const el = document.getElementById("captcha-status");
+      if (el) el.textContent = `Solving (${zeros} zeros)… ${nonce.toLocaleString()} tries`;
+      setTimeout(step, 0);
+    };
+    step();
+  });
 }
 
-async function sha256(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+// Compact synchronous SHA-256 (returns lowercase hex). Pure JS, no async.
+const _K = (() => {
+  const k = [];
+  let i = 0, n = 2;
+  const isPrime = (x) => { for (let d = 2; d * d <= x; d++) if (x % d === 0) return false; return true; };
+  while (k.length < 64) { if (isPrime(n)) k.push(Math.floor((n ** (1/3) % 1) * 2 ** 32) >>> 0); n++; }
+  return k;
+})();
+
+function sha256sync(ascii) {
+  const rightRotate = (v, a) => (v >>> a) | (v << (32 - a));
+  let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,
+      h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+
+  const bytes = [];
+  for (let i = 0; i < ascii.length; i++) bytes.push(ascii.charCodeAt(i) & 0xff);
+  const bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let i = 7; i >= 0; i--) bytes.push((bitLen / 2 ** (8 * i)) & 0xff);
+
+  const w = new Uint32Array(64);
+  for (let off = 0; off < bytes.length; off += 64) {
+    for (let i = 0; i < 16; i++)
+      w[i] = (bytes[off+i*4]<<24)|(bytes[off+i*4+1]<<16)|(bytes[off+i*4+2]<<8)|(bytes[off+i*4+3]);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rightRotate(w[i-15],7)^rightRotate(w[i-15],18)^(w[i-15]>>>3);
+      const s1 = rightRotate(w[i-2],17)^rightRotate(w[i-2],19)^(w[i-2]>>>10);
+      w[i] = (w[i-16]+s0+w[i-7]+s1)|0;
+    }
+    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for (let i = 0; i < 64; i++) {
+      const S1=rightRotate(e,6)^rightRotate(e,11)^rightRotate(e,25);
+      const ch=(e&f)^(~e&g);
+      const t1=(h+S1+ch+_K[i]+w[i])|0;
+      const S0=rightRotate(a,2)^rightRotate(a,13)^rightRotate(a,22);
+      const maj=(a&b)^(a&c)^(b&c);
+      const t2=(S0+maj)|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;
+    }
+    h0=(h0+a)|0;h1=(h1+b)|0;h2=(h2+c)|0;h3=(h3+d)|0;
+    h4=(h4+e)|0;h5=(h5+f)|0;h6=(h6+g)|0;h7=(h7+h)|0;
+  }
+  const toHex = (v) => (v>>>0).toString(16).padStart(8,"0");
+  return toHex(h0)+toHex(h1)+toHex(h2)+toHex(h3)+toHex(h4)+toHex(h5)+toHex(h6)+toHex(h7);
 }
 
 // ── Honeypot rendering ────────────────────────────────────────────────────────
